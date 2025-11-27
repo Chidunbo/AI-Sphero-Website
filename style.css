@@ -1,0 +1,242 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+}
+
+.header {
+    text-align: center;
+    color: white;
+    margin-bottom: 30px;
+}
+
+.header h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.subtitle {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.left-panel, .right-panel {
+    background: white;
+    padding: 25px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    width: 100%;
+    max-width: 400px;
+}
+
+.left-panel h2, .right-panel h2 {
+    margin-bottom: 20px;
+    color: #667eea;
+    font-size: 1.5em;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 14px 20px;
+    margin: 10px 0;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.status {
+    text-align: center;
+    padding: 10px;
+    margin: 15px 0;
+    border-radius: 8px;
+    background: #f0f0f0;
+    font-weight: 600;
+    color: #aa0000;
+}
+
+.webcam-box {
+    margin-top: 20px;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.webcam-placeholder {
+    color: #888;
+    font-style: italic;
+}
+
+#webcam-container canvas {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    background: #000;
+    border-radius: 12px;
+}
+
+/* Ensure video is visible and properly sized */
+#webcam-container video,
+#webcam-container canvas {
+    object-fit: contain;
+    max-height: 400px;
+}
+
+.predictions {
+    margin-bottom: 25px;
+}
+
+.predictions div {
+    padding: 10px;
+    margin: 5px 0;
+    background: #f8f9fa;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    border-left: 4px solid #667eea;
+}
+
+.gesture-display {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 25px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 25px;
+    color: white;
+}
+
+.gesture-display h3 {
+    margin-bottom: 15px;
+    font-size: 1.2em;
+}
+
+.gesture-name {
+    font-size: 2.5em;
+    font-weight: bold;
+    margin: 15px 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.confidence {
+    font-size: 1.1em;
+    opacity: 0.9;
+    margin-top: 10px;
+}
+
+.instructions {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 12px;
+    border-left: 4px solid #667eea;
+}
+
+.instructions h3 {
+    margin-bottom: 15px;
+    color: #667eea;
+    font-size: 1.2em;
+}
+
+.instructions ol {
+    margin-left: 20px;
+    line-height: 1.8;
+}
+
+.instructions li {
+    margin-bottom: 8px;
+}
+
+.note {
+    margin-top: 15px;
+    padding: 12px;
+    background: #fff3cd;
+    border-radius: 6px;
+    border-left: 4px solid #ffc107;
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+
+/* Responsive design for tablets/iPads */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .left-panel, .right-panel {
+        max-width: 100%;
+    }
+    
+    .header h1 {
+        font-size: 2em;
+    }
+    
+    .gesture-name {
+        font-size: 2em;
+    }
+}
+
+/* Responsive design for phones */
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+    
+    .header h1 {
+        font-size: 1.5em;
+    }
+    
+    .left-panel, .right-panel {
+        padding: 15px;
+    }
+    
+    .gesture-name {
+        font-size: 1.5em;
+    }
+}

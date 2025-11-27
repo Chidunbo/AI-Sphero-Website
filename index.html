@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sphero Gesture Controller</title>
+
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- TensorFlow.js and Teachable Machine Image library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+</head>
+
+<body>
+    <div class="header">
+        <h1>🤖 Sphero Gesture Controller</h1>
+        <p class="subtitle">Control your Sphero BOLT with hand gestures!</p>
+    </div>
+
+    <div class="container">
+        <div class="left-panel">
+            <h2>Setup</h2>
+            <button id="startBtn" class="btn-primary">Start Model</button>
+            <button id="turnOnCameraBtn" class="btn-primary">Turn On Camera</button>
+            <button id="connectBtn" class="btn-primary">Connect to Sphero BOLT</button>
+            
+            <div id="connectionStatus" class="status">Not connected</div>
+            
+            <div id="webcam-container" class="webcam-box">
+                <p class="webcam-placeholder">Webcam will appear here</p>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <h2>Live Predictions</h2>
+            <div id="label-container" class="predictions"></div>
+
+            <div class="gesture-display">
+                <h3>Detected Gesture</h3>
+                <div id="gestureOutput" class="gesture-name">–</div>
+                <div class="confidence">
+                    Confidence: <span id="confidenceOutput">0%</span>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h3>📝 Instructions</h3>
+                <ol>
+                    <li>Click "Start Model" to load your Teachable Machine model</li>
+                    <li>Click "Turn On Camera" to request webcam access</li>
+                    <li>Click "Connect to Sphero BOLT" to pair with your robot</li>
+                    <li>Show your hand gestures to the camera to control the robot!</li>
+                </ol>
+                <p class="note">💡 Make sure your gesture confidence is above 85% for the robot to respond.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
