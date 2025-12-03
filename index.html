@@ -10,6 +10,9 @@
     <!-- TensorFlow.js and Teachable Machine Image library -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    
+    <!-- Gesture Configuration (modular and customizable) -->
+    <script src="gesture-config.js"></script>
 </head>
 
 <body>
@@ -52,7 +55,8 @@
                     <li>Click "Connect to Sphero BOLT" to pair with your robot</li>
                     <li>Show your hand gestures to the camera to control the robot!</li>
                 </ol>
-                <p class="note">💡 Make sure your gesture confidence is above 85% for the robot to respond.</p>
+                <p class="note">💡 Gesture commands are sent in real-time when confidence is above 50%.</p>
+                <p class="note">🤖 Hand gesture → Turn to 0° | Head gesture → Turn to 90°</p>
             </div>
         </div>
     </div>
