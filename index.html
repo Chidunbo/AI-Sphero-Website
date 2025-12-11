@@ -17,26 +17,36 @@
 
 <body>
     <div class="header">
-        <h1>🤖 Sphero Gesture Controller</h1>
+        <h1>Sphero Gesture Controller</h1>
         <p class="subtitle">Control your Sphero BOLT with hand gestures!</p>
     </div>
 
     <div class="container">
-        <div class="left-panel">
+        <!-- Column 1: Setup -->
+        <div class="column setup-column">
             <h2>Setup</h2>
-            <button id="startBtn" class="btn-primary">Start Model</button>
-            <button id="turnOnCameraBtn" class="btn-primary">Turn On Camera</button>
-            <button id="connectBtn" class="btn-primary">Connect to Sphero BOLT</button>
             
-            <div id="connectionStatus" class="status">Not connected</div>
-            
-            <div id="webcam-container" class="webcam-box">
-                <p class="webcam-placeholder">Webcam will appear here</p>
+            <!-- Row 1: Model Loaded Button and Categories -->
+            <div class="setup-row">
+                <button id="startBtn" class="btn-primary">Load Model</button>
+                <div id="model-categories" class="model-categories"></div>
             </div>
+            
+            <!-- Row 2: Camera View and Button -->
+            <div class="setup-row">
+                <div id="webcam-container" class="webcam-box">
+                    <p class="webcam-placeholder">Webcam will appear here</p>
+                </div>
+                <button id="turnOnCameraBtn" class="btn-primary">Camera On</button>
+            </div>
+            
+            <button id="connectBtn" class="btn-primary">Connect to Sphero BOLT</button>
+            <div id="connectionStatus" class="status">Not connected</div>
         </div>
 
-        <div class="right-panel">
-            <h2>Live Predictions</h2>
+        <!-- Column 2: Prediction -->
+        <div class="column prediction-column inactive">
+            <h2>Prediction</h2>
             <div id="label-container" class="predictions"></div>
 
             <div class="gesture-display">
@@ -46,17 +56,24 @@
                     Confidence: <span id="confidenceOutput">0%</span>
                 </div>
             </div>
+            
+            <div class="debug-section" style="margin-top: 20px;">
+                <h3>Debug Terminal</h3>
+                <div id="debug-terminal" class="debug-terminal"></div>
+            </div>
+        </div>
 
-            <div class="instructions">
-                <h3>📝 Instructions</h3>
-                <ol>
-                    <li>Click "Start Model" to load your Teachable Machine model</li>
-                    <li>Click "Turn On Camera" to request webcam access</li>
-                    <li>Click "Connect to Sphero BOLT" to pair with your robot</li>
-                    <li>Show your hand gestures to the camera to control the robot!</li>
-                </ol>
-                <p class="note">💡 Gesture commands are sent in real-time when confidence is above 50%.</p>
-                <p class="note">🤖 Hand gesture → Turn to 0° | Head gesture → Turn to 90°</p>
+        <!-- Column 3: Sphero Command -->
+        <div class="column command-column inactive">
+            <h2>Sphero Command</h2>
+            
+            <div class="debug-section">
+                <h3>Virtual LED Matrix</h3>
+                <div id="virtual-matrix" class="virtual-matrix"></div>
+                <div id="matrix-info" class="matrix-info">Matrix: Off</div>
+                
+                <h3 style="margin-top: 20px;">Movement Status</h3>
+                <div id="movement-status" class="movement-status">Status: Idle</div>
             </div>
         </div>
     </div>

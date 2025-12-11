@@ -22,7 +22,7 @@ document.getElementById("startBtn").addEventListener("click", initModel);
 async function initModel() {
     try {
         const startBtn = document.getElementById("startBtn");
-        startBtn.textContent = "Loading model...";
+        startBtn.textContent = "Loading...";
         startBtn.disabled = true;
 
         // Check if running from file:// protocol (CORS issue)
@@ -58,21 +58,51 @@ async function initModel() {
         model = await tmImage.load(modelURL, metadataURL);
         maxPredictions = model.getTotalClasses();
 
-        console.log("Model loaded successfully! Classes:", maxPredictions);
+        // Fetch metadata to get class names
+        const metadataResponse = await fetch(metadataURL);
+        const metadata = await metadataResponse.json();
+        const classNames = metadata.labels || [];
 
-        // Setup prediction labels
+        console.log("Model loaded successfully! Classes:", maxPredictions);
+        logToTerminal(`Model loaded: ${maxPredictions} classes`, "success");
+
+        // Display model categories
+        displayModelCategories(classNames);
+
+        // Setup prediction labels with bar structure
         labelContainer = document.getElementById("label-container");
         labelContainer.innerHTML = "";
         for (let i = 0; i < maxPredictions; i++) {
-            labelContainer.appendChild(document.createElement("div"));
+            const predictionDiv = document.createElement("div");
+            predictionDiv.className = "prediction-item";
+            
+            // Create label text
+            const labelText = document.createElement("span");
+            labelText.className = "prediction-label";
+            
+            // Create bar container
+            const barContainer = document.createElement("div");
+            barContainer.className = "prediction-bar-container";
+            
+            // Create blue fill bar
+            const barFill = document.createElement("div");
+            barFill.className = "prediction-bar-fill";
+            barFill.style.width = "0%";
+            
+            barContainer.appendChild(barFill);
+            predictionDiv.appendChild(labelText);
+            predictionDiv.appendChild(barContainer);
+            
+            labelContainer.appendChild(predictionDiv);
         }
 
         startBtn.textContent = "Model Loaded ✓";
         console.log("Model is ready to use!");
+        logToTerminal("Model is ready to use!", "success");
         
     } catch (error) {
         const startBtn = document.getElementById("startBtn");
-        startBtn.textContent = "Start Model";
+        startBtn.textContent = "Load Model";
         startBtn.disabled = false;
         
         console.error("Error loading model:", error);
@@ -162,11 +192,35 @@ async function init() {
             labelContainer = document.getElementById("label-container");
             labelContainer.innerHTML = "";
             for (let i = 0; i < maxPredictions; i++) {
-                labelContainer.appendChild(document.createElement("div"));
+                const predictionDiv = document.createElement("div");
+                predictionDiv.className = "prediction-item";
+                
+                // Create label text
+                const labelText = document.createElement("span");
+                labelText.className = "prediction-label";
+                
+                // Create bar container
+                const barContainer = document.createElement("div");
+                barContainer.className = "prediction-bar-container";
+                
+                // Create blue fill bar
+                const barFill = document.createElement("div");
+                barFill.className = "prediction-bar-fill";
+                barFill.style.width = "0%";
+                
+                barContainer.appendChild(barFill);
+                predictionDiv.appendChild(labelText);
+                predictionDiv.appendChild(barContainer);
+                
+                labelContainer.appendChild(predictionDiv);
             }
         }
 
         turnOnCameraBtn.textContent = "Camera On ✓";
+        logToTerminal("Camera started", "success");
+        
+        // Activate prediction column
+        activatePredictionColumn();
         
     } catch (error) {
         const turnOnCameraBtn = document.getElementById("turnOnCameraBtn");
@@ -208,14 +262,27 @@ async function predict() {
     let highestProb = 0;
 
     for (let i = 0; i < maxPredictions; i++) {
-        const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-        labelContainer.childNodes[i].innerHTML = classPrediction;
+        const predictionItem = labelContainer.childNodes[i];
+        const prob = parseFloat(prediction[i].probability);
+        const className = prediction[i].className;
+        
+        // Update label text
+        const labelText = predictionItem.querySelector(".prediction-label");
+        if (labelText) {
+            labelText.textContent = className + ": " + prob.toFixed(2);
+        }
+        
+        // Update bar fill width based on probability (0-1 range maps to 0-100%)
+        const barFill = predictionItem.querySelector(".prediction-bar-fill");
+        if (barFill) {
+            const percentage = (prob * 100).toFixed(1);
+            barFill.style.width = percentage + "%";
+        }
 
         // Track top prediction
-        const prob = parseFloat(prediction[i].probability);
         if (prob > highestProb) {
             highestProb = prob;
-            highestClass = prediction[i].className;
+            highestClass = className;
         }
     }
 
@@ -295,11 +362,15 @@ async function connectSphero() {
         
         isConnected = true;
         console.log("✅ [DEBUG] Connection established!");
+        logToTerminal("Connected to Sphero BOLT!", "success");
         
         // Update UI
         connectBtn.textContent = "Connected ✓";
         connectBtn.disabled = true;
         updateConnectionStatus("Connected to Sphero BOLT!", "#00aa00");
+        
+        // Activate command column
+        activateCommandColumn();
         
         // Check connection status periodically
         startStatusCheck();
@@ -312,6 +383,7 @@ async function connectSphero() {
         connectBtn.disabled = false;
         
         updateConnectionStatus("Connection failed", "#aa0000");
+        logToTerminal(`Connection failed: ${error.message}`, "error");
         alert("Connection failed: " + error.message + "\n\nMake sure:\n1. The backend server is running (python backend/app.py)\n2. Your Sphero BOLT is powered on and nearby\n3. Bluetooth is enabled on your computer");
     }
 }
@@ -335,6 +407,11 @@ function startStatusCheck() {
                 connectBtn.textContent = "Connect to Sphero BOLT";
                 connectBtn.disabled = false;
                 updateConnectionStatus("Disconnected", "#aa0000");
+                logToTerminal("Disconnected from Sphero BOLT", "warning");
+                updateMovementStatus("Status: Disconnected");
+                
+                // Deactivate command column
+                deactivateCommandColumn();
                 clearInterval(statusCheckInterval);
                 statusCheckInterval = null;
             }
@@ -387,7 +464,12 @@ function onDisconnected() {
 // Set LED color (R, G, B values 0-255)
 // Optimized for real-time: fire-and-forget, no blocking
 function setColor(r, g, b) {
-    if (!isConnected) return;
+    if (!isConnected) {
+        logToTerminal("setColor called but not connected", "warning");
+        return;
+    }
+    
+    logToTerminal(`LED color: RGB(${r}, ${g}, ${b})`, "action");
     
     // Fire-and-forget: send request without waiting for response
     fetch(`${API_BASE_URL}/setColor`, {
@@ -396,15 +478,23 @@ function setColor(r, g, b) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({ r, g, b })
-    }).catch(() => {
-        // Silently handle errors - don't block the prediction loop
+    }).catch((error) => {
+        logToTerminal(`Error setting LED color: ${error.message}`, "error");
     });
 }
 
 // Set matrix LED color (R, G, B values 0-255)
 // Optimized for real-time: fire-and-forget, no blocking
 function setMatrixColor(r, g, b) {
-    if (!isConnected) return;
+    if (!isConnected) {
+        logToTerminal("setMatrixColor called but not connected", "warning");
+        // Still update virtual matrix for debugging
+        updateVirtualMatrix(r, g, b);
+        return;
+    }
+    
+    // Update virtual matrix immediately for visual feedback
+    updateVirtualMatrix(r, g, b);
     
     // Fire-and-forget: send request without waiting for response
     fetch(`${API_BASE_URL}/setMatrixColor`, {
@@ -413,15 +503,22 @@ function setMatrixColor(r, g, b) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({ r, g, b })
-    }).catch(() => {
-        // Silently handle errors - don't block the prediction loop
+    }).catch((error) => {
+        logToTerminal(`Error setting matrix color: ${error.message}`, "error");
     });
 }
 
 // Drive command (speed 0-255, heading 0-359 degrees)
 // Optimized for real-time: fire-and-forget, no blocking
 function drive(speed, heading) {
-    if (!isConnected) return;
+    if (!isConnected) {
+        logToTerminal("drive called but not connected", "warning");
+        return;
+    }
+    
+    const speedPercent = ((speed / 255) * 100).toFixed(0);
+    logToTerminal(`Drive: Speed ${speedPercent}% (${speed}), Heading ${heading}°`, "action");
+    updateMovementStatus(`Status: Moving at ${speedPercent}% speed, heading ${heading}°`);
     
     // Fire-and-forget: send request without waiting for response
     fetch(`${API_BASE_URL}/drive`, {
@@ -430,15 +527,21 @@ function drive(speed, heading) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({ speed, heading })
-    }).catch(() => {
-        // Silently handle errors - don't block the prediction loop
+    }).catch((error) => {
+        logToTerminal(`Error driving: ${error.message}`, "error");
     });
 }
 
 // Stop the robot
 // Optimized for real-time: fire-and-forget, no blocking
 function stop() {
-    if (!isConnected) return;
+    if (!isConnected) {
+        logToTerminal("stop called but not connected", "warning");
+        return;
+    }
+    
+    logToTerminal("Stop command sent", "action");
+    updateMovementStatus("Status: Stopped");
     
     // Fire-and-forget: send request without waiting for response
     fetch(`${API_BASE_URL}/stop`, {
@@ -446,15 +549,22 @@ function stop() {
         headers: {
             'Content-Type': 'application/json'
         }
-    }).catch(() => {
-        // Silently handle errors - don't block the prediction loop
+    }).catch((error) => {
+        logToTerminal(`Error stopping: ${error.message}`, "error");
     });
 }
 
 // Turn robot to a specific heading (degrees 0-359)
 // Optimized for real-time: fire-and-forget, no blocking
 function turn(heading, speed = 0) {
-    if (!isConnected) return;
+    if (!isConnected) {
+        logToTerminal("turn called but not connected", "warning");
+        return;
+    }
+    
+    const speedText = speed > 0 ? ` at speed ${speed}` : "";
+    logToTerminal(`Turn to ${heading}°${speedText}`, "action");
+    updateMovementStatus(`Status: Turning to ${heading}°${speedText}`);
     
     // Fire-and-forget: send request without waiting for response
     fetch(`${API_BASE_URL}/turn`, {
@@ -463,8 +573,8 @@ function turn(heading, speed = 0) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({ heading, speed })
-    }).catch(() => {
-        // Silently handle errors - don't block the prediction loop
+    }).catch((error) => {
+        logToTerminal(`Error turning: ${error.message}`, "error");
     });
 }
 
@@ -476,7 +586,13 @@ function turn(heading, speed = 0) {
 // Scroll text on LED matrix
 // Optimized for real-time: fire-and-forget, no blocking
 function scrollMatrixText(text, color, speed, loop) {
-    if (!isConnected) return;
+    if (!isConnected) {
+        logToTerminal("scrollMatrixText called but not connected", "warning");
+        return;
+    }
+    
+    const colorStr = color ? `RGB(${color.r}, ${color.g}, ${color.b})` : "default";
+    logToTerminal(`Scroll text: "${text}" (${colorStr}, speed: ${speed}, loop: ${loop})`, "action");
     
     // Fire-and-forget: send request without waiting for response
     fetch(`${API_BASE_URL}/scrollMatrixText`, {
@@ -485,11 +601,170 @@ function scrollMatrixText(text, color, speed, loop) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({ text, color, speed, loop })
-    }).catch(() => {
-        // Silently handle errors - don't block the prediction loop
+    }).catch((error) => {
+        logToTerminal(`Error scrolling text: ${error.message}`, "error");
     });
 }
 
+
+//--------------------------------------
+// DEBUG TERMINAL & VIRTUAL MATRIX
+//--------------------------------------
+
+// Column activation functions
+function activatePredictionColumn() {
+    const predictionColumn = document.querySelector(".prediction-column");
+    if (predictionColumn) {
+        predictionColumn.classList.remove("inactive");
+    }
+}
+
+function deactivatePredictionColumn() {
+    const predictionColumn = document.querySelector(".prediction-column");
+    if (predictionColumn) {
+        predictionColumn.classList.add("inactive");
+    }
+}
+
+function activateCommandColumn() {
+    const commandColumn = document.querySelector(".command-column");
+    if (commandColumn) {
+        commandColumn.classList.remove("inactive");
+    }
+}
+
+function deactivateCommandColumn() {
+    const commandColumn = document.querySelector(".command-column");
+    if (commandColumn) {
+        commandColumn.classList.add("inactive");
+    }
+}
+
+// Display model categories
+function displayModelCategories(categories) {
+    const categoriesContainer = document.getElementById("model-categories");
+    if (!categoriesContainer || !categories || categories.length === 0) return;
+    
+    categoriesContainer.innerHTML = "";
+    categoriesContainer.classList.add("show");
+    
+    const title = document.createElement("h4");
+    title.textContent = "Model Categories:";
+    categoriesContainer.appendChild(title);
+    
+    const categoryList = document.createElement("div");
+    categoryList.className = "category-list";
+    
+    categories.forEach(category => {
+        const tag = document.createElement("span");
+        tag.className = "category-tag";
+        tag.textContent = category;
+        categoryList.appendChild(tag);
+    });
+    
+    categoriesContainer.appendChild(categoryList);
+    logToTerminal(`Categories displayed: ${categories.join(", ")}`, "info");
+}
+
+// Initialize virtual matrix on page load
+let virtualMatrix = null;
+let matrixPixels = [];
+
+function initVirtualMatrix() {
+    const matrixContainer = document.getElementById("virtual-matrix");
+    if (!matrixContainer) return;
+    
+    matrixContainer.innerHTML = "";
+    matrixPixels = [];
+    
+    // Create 8x8 grid of pixels
+    for (let i = 0; i < 64; i++) {
+        const pixel = document.createElement("div");
+        pixel.className = "matrix-pixel";
+        pixel.style.backgroundColor = "#000";
+        matrixContainer.appendChild(pixel);
+        matrixPixels.push(pixel);
+    }
+    
+    virtualMatrix = { r: 0, g: 0, b: 0 };
+    logToTerminal("Virtual matrix initialized (8x8)", "info");
+}
+
+// Log message to debug terminal
+function logToTerminal(message, type = "info") {
+    const terminal = document.getElementById("debug-terminal");
+    if (!terminal) return;
+    
+    const logEntry = document.createElement("div");
+    logEntry.className = "debug-log";
+    
+    const time = new Date().toLocaleTimeString();
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "debug-log-time";
+    timeSpan.textContent = `[${time}]`;
+    
+    const messageSpan = document.createElement("span");
+    messageSpan.className = `debug-log-${type}`;
+    messageSpan.textContent = message;
+    
+    logEntry.appendChild(timeSpan);
+    logEntry.appendChild(messageSpan);
+    terminal.appendChild(logEntry);
+    
+    // Auto-scroll to bottom
+    terminal.scrollTop = terminal.scrollHeight;
+    
+    // Limit to last 100 entries to prevent memory issues
+    while (terminal.children.length > 100) {
+        terminal.removeChild(terminal.firstChild);
+    }
+}
+
+// Update virtual matrix display
+function updateVirtualMatrix(r, g, b) {
+    if (!matrixPixels || matrixPixels.length === 0) {
+        initVirtualMatrix();
+    }
+    
+    virtualMatrix = { r, g, b };
+    const rgbColor = `rgb(${r}, ${g}, ${b})`;
+    
+    // Update all pixels
+    matrixPixels.forEach(pixel => {
+        pixel.style.backgroundColor = rgbColor;
+    });
+    
+    // Update info text
+    const matrixInfo = document.getElementById("matrix-info");
+    if (matrixInfo) {
+        const hexColor = `#${[r, g, b].map(x => {
+            const hex = x.toString(16);
+            return hex.length === 1 ? "0" + hex : hex;
+        }).join("")}`;
+        matrixInfo.textContent = `Matrix: RGB(${r}, ${g}, ${b}) ${hexColor.toUpperCase()}`;
+        matrixInfo.style.color = rgbColor;
+    }
+    
+    logToTerminal(`Matrix color set: RGB(${r}, ${g}, ${b})`, "action");
+}
+
+// Update movement status display
+function updateMovementStatus(status) {
+    const movementStatus = document.getElementById("movement-status");
+    if (movementStatus) {
+        movementStatus.textContent = status;
+    }
+}
+
+// Initialize on page load
+document.addEventListener("DOMContentLoaded", () => {
+    initVirtualMatrix();
+    logToTerminal("Debug terminal ready", "success");
+    
+    // Ensure columns start in inactive state
+    deactivatePredictionColumn();
+    deactivateCommandColumn();
+});
 
 //--------------------------------------
 // 🎯 GESTURE HANDLING (MODULAR)
@@ -498,18 +773,12 @@ function scrollMatrixText(text, color, speed, loop) {
 // Students can modify gesture-config.js to customize their gesture controls
 // Optimized for real-time: non-blocking, fire-and-forget
 function handleGesture(gesture) {
+    logToTerminal(`Gesture detected: "${gesture}"`, "action");
+    
     // Use the modular gesture configuration system
     if (typeof executeGestureActions === 'function') {
         // Fire-and-forget: execute immediately without blocking
         executeGestureActions(gesture);
-    } else {
-        // Fallback to simple hardcoded behavior if config system not loaded
-        if (gesture === "hand" || gesture === "Hand") {
-            turn(0, 0);
-            setColor(0, 255, 0);
-        } else if (gesture === "head" || gesture === "Head") {
-            turn(90, 0);
-            setColor(255, 0, 0);
-        }
     }
+    // No fallback needed - gesture-config.js handles all gestures
 }

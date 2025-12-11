@@ -14,53 +14,30 @@
  */
 
 const GESTURE_CONFIG = {
-    // Hand gesture: set matrix to light blue
-    "hand": {
+    // Ms. Liu gesture: set matrix to light blue
+    // Support both "Ms. Liu" and "Ms.Liu" variations
+    "Ms. Liu": {
+        actions: [
+            { type: "setMatrixColor", r: 173, g: 216, b: 230 }  // Light blue
+        ]
+    },
+    "Ms.Liu": {
         actions: [
             { type: "setMatrixColor", r: 173, g: 216, b: 230 }  // Light blue
         ]
     },
     
-    // Head gesture: set matrix to orange
-    "head": {
+    // Cat gesture: set matrix to orange
+    "Cat": {
         actions: [
             { type: "setMatrixColor", r: 255, g: 165, b: 0 }  // Orange
         ]
     },
     
-    // Additional gesture examples (students can add more)
-    "Forward": {
+    // Dog gesture: set matrix to brown
+    "Dog": {
         actions: [
-            { type: "drive", speed: 100, heading: 0 },
-            { type: "setColor", r: 0, g: 255, b: 0 }
-        ]
-    },
-    
-    "Backward": {
-        actions: [
-            { type: "drive", speed: 80, heading: 180 },
-            { type: "setColor", r: 255, g: 0, b: 0 }
-        ]
-    },
-    
-    "Left": {
-        actions: [
-            { type: "turn", heading: 270, speed: 0 },
-            { type: "setColor", r: 255, g: 165, b: 0 }
-        ]
-    },
-    
-    "Right": {
-        actions: [
-            { type: "turn", heading: 90, speed: 0 },
-            { type: "setColor", r: 0, g: 0, b: 255 }
-        ]
-    },
-    
-    "Stop": {
-        actions: [
-            { type: "stop" },
-            { type: "setColor", r: 255, g: 255, b: 255 }
+            { type: "setMatrixColor", r: 139, g: 69, b: 19 }  // Saddle brown
         ]
     }
 };
@@ -73,12 +50,23 @@ const GESTURE_CONFIG = {
 function getGestureConfig(gestureName) {
     if (!gestureName) return null;
     
+    // Normalize: remove spaces around periods and convert to lowercase for flexible matching
+    const normalize = (str) => str.toLowerCase().replace(/\s*\.\s*/g, '.');
+    
     // Try exact match first
     if (GESTURE_CONFIG[gestureName]) {
         return GESTURE_CONFIG[gestureName];
     }
     
-    // Try case-insensitive match
+    // Try normalized match (handles case and space variations around periods)
+    const normalizedName = normalize(gestureName);
+    for (const key in GESTURE_CONFIG) {
+        if (normalize(key) === normalizedName) {
+            return GESTURE_CONFIG[key];
+        }
+    }
+    
+    // Fallback: try simple case-insensitive match
     const lowerName = gestureName.toLowerCase();
     for (const key in GESTURE_CONFIG) {
         if (key.toLowerCase() === lowerName) {
