@@ -290,8 +290,8 @@ body {
     overflow-x: hidden;
     line-height: 1.6;
     border: 2px solid #333;
-    flex: 1;
-    min-height: 200px;
+    height: 300px;
+    max-height: 300px;
 }
 
 .debug-terminal::-webkit-scrollbar {

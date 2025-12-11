@@ -294,15 +294,17 @@ async function predict() {
     // Very low threshold for maximum responsiveness
     const confidenceThreshold = 0.3; // 30% confidence threshold for real-time control
     
-    if (highestProb > confidenceThreshold && isConnected && highestClass) {
+    if (highestProb > confidenceThreshold && highestClass) {
         // Normalize gesture name for consistent comparisons (prevents flicker from casing/spaces)
         const normalizedGesture = highestClass.trim().toLowerCase();
         
-        // Only send command if gesture has changed
+        // Process gestures for matrix color updates even when not connected
+        // Only send robot commands when connected
         if (lastDetectedGesture !== normalizedGesture) {
             lastDetectedGesture = normalizedGesture;
             // Fire-and-forget: send command immediately for current frame
-            handleGesture(normalizedGesture);
+            // Use original highestClass (not normalized) to ensure proper config lookup
+            handleGesture(highestClass.trim());
         }
     }
 }
