@@ -1,6 +1,6 @@
 # Backend API Server
 
-Flask backend that handles Bluetooth communication with Sphero BOLT robots.
+Flask backend that handles model file uploads and serves static files.
 
 ## Installation
 
@@ -8,16 +8,15 @@ Flask backend that handles Bluetooth communication with Sphero BOLT robots.
 pip install -r requirements.txt
 ```
 
-**Windows users**: If you encounter issues with `bleak`, try:
-```bash
-pip install bleak[winrt]
-```
-
 ## Running the Server
 
 ```bash
 python app.py
 ```
+
+Or use the startup scripts from the `scripts/` folder:
+- Windows: `scripts/start_backend.bat`
+- Linux/Mac: `scripts/start_backend.sh`
 
 The server will start on `http://localhost:5000`
 
@@ -30,146 +29,49 @@ Health check endpoint.
 ```json
 {
   "status": "ok",
-  "service": "Sphero BOLT API"
+  "service": "Model Upload API"
 }
 ```
 
-### `GET /api/scan`
-Scan for available Sphero BOLT devices.
+### `POST /api/uploadModel`
+Upload a ZIP file containing model files (metadata.json, model.json, weights.bin).
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Field name: `zipfile`
+- File: ZIP archive containing model files
 
 **Response:**
 ```json
 {
   "success": true,
-  "devices": [
-    {
-      "name": "SB-XXXX",
-      "address": "XX:XX:XX:XX:XX:XX"
-    }
-  ]
+  "message": "Model files uploaded successfully",
+  "files": ["metadata.json", "model.json", "weights.bin"]
 }
 ```
 
-### `POST /api/connect`
-Connect to a Sphero BOLT device.
-
-**Request Body:**
-```json
-{
-  "address": "XX:XX:XX:XX:XX:XX"
-}
-```
+### `POST /api/clearModel`
+Clear/delete uploaded model files.
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "Connected to Sphero BOLT",
-  "address": "XX:XX:XX:XX:XX:XX"
+  "message": "Model files cleared",
+  "removedFiles": ["metadata.json", "model.json", "weights.bin"]
 }
 ```
 
-### `GET /api/status`
-Get current connection status.
+## Static File Serving
 
-**Response:**
-```json
-{
-  "connected": true,
-  "address": "XX:XX:XX:XX:XX:XX"
-}
-```
+The backend serves:
+- Frontend files from `frontend/` directory
+- Model files from `models/` directory
+- boltAPP library from `lib/boltAPP/` directory
 
-### `POST /api/disconnect`
-Disconnect from Sphero.
+## Architecture
 
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Disconnected"
-}
-```
-
-### `POST /api/setColor`
-Set Sphero LED color.
-
-**Request Body:**
-```json
-{
-  "r": 255,
-  "g": 0,
-  "b": 0
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Color set to RGB(255, 0, 0)"
-}
-```
-
-### `POST /api/drive`
-Drive Sphero.
-
-**Request Body:**
-```json
-{
-  "speed": 100,
-  "heading": 0
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Driving: speed=100, heading=0°"
-}
-```
-
-### `POST /api/stop`
-Stop Sphero.
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Stopped"
-}
-```
-
-### `POST /api/scrollMatrixText`
-Scroll text on Sphero LED matrix.
-
-**Request Body:**
-```json
-{
-  "text": "Hello",
-  "color": {
-    "r": 255,
-    "g": 255,
-    "b": 255
-  },
-  "speed": 15,
-  "loop": false
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Scrolling text: 'Hello'"
-}
-```
-
-## Troubleshooting
-
-- **Bluetooth permission errors**: Make sure your OS allows Python to access Bluetooth
-- **Device not found**: Ensure Sphero is powered on and nearby
-- **Connection timeout**: Try restarting the Sphero and scanning again
-
+- **Frontend**: Handles ML model loading, webcam, gesture detection, and Sphero control via Web Bluetooth
+- **Backend**: Handles model file uploads and serves static files only
+- **Sphero Connection**: Handled directly in the browser using Web Bluetooth API (no backend involvement)
 

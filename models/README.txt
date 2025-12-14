@@ -7,7 +7,6 @@ INSTRUCTIONS FOR STUDENTS:
 ==========================
 
 1. Train your gesture model in Teachable Machine (https://teachablemachine.withgoogle.com/)
-   - Use the training data from the ../training_data/ folder if needed
    - Create classes for your gestures (e.g., "hand-up", "head-left", etc.)
 
 2. Export your model:
@@ -34,6 +33,6 @@ INSTRUCTIONS FOR STUDENTS:
 
 IMPORTANT: 
 ----------
-- The JavaScript code from Teachable Machine is already integrated into app.js
+- The JavaScript code from Teachable Machine is already integrated into the frontend
 - You only need to copy the model files (model.json, metadata.json, and weights files) into this folder
-- Training data is stored separately in the ../training_data/ folder for reference
+- Upload a ZIP file containing these files through the web interface

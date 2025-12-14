@@ -34,7 +34,7 @@ def health():
 def clear_model():
     """Clear/delete uploaded model files"""
     try:
-        model_dir = os.path.join(BASE_DIR, 'my_model')
+        model_dir = os.path.join(BASE_DIR, 'models')
         
         # List of files to remove
         files_to_remove = ['metadata.json', 'model.json', 'weights.bin']
@@ -134,7 +134,7 @@ def upload_model():
             }), 400
         
         # Define model directory
-        model_dir = os.path.join(BASE_DIR, 'my_model')
+        model_dir = os.path.join(BASE_DIR, 'models')
         
         # Create directory if it doesn't exist
         os.makedirs(model_dir, exist_ok=True)
@@ -195,37 +195,43 @@ def upload_model():
 @app.route('/')
 def index():
     """Serve the main HTML file"""
-    return send_file(os.path.join(BASE_DIR, 'index.html'))
+    return send_file(os.path.join(BASE_DIR, 'frontend', 'index.html'))
 
 
 @app.route('/app.js')
 def serve_app_js():
     """Serve the main JavaScript file"""
-    return send_from_directory(BASE_DIR, 'app.js', mimetype='application/javascript')
+    return send_from_directory(os.path.join(BASE_DIR, 'frontend'), 'app.js', mimetype='application/javascript')
 
 
 @app.route('/gesture-config.js')
 def serve_gesture_config():
     """Serve the gesture configuration file"""
-    return send_from_directory(BASE_DIR, 'gesture-config.js', mimetype='application/javascript')
+    return send_from_directory(os.path.join(BASE_DIR, 'frontend'), 'gesture-config.js', mimetype='application/javascript')
+
+
+@app.route('/movement-control.js')
+def serve_movement_control():
+    """Serve the movement control module"""
+    return send_from_directory(os.path.join(BASE_DIR, 'frontend'), 'movement-control.js', mimetype='application/javascript')
 
 
 @app.route('/style.css')
 def serve_style_css():
     """Serve the CSS file"""
-    return send_from_directory(BASE_DIR, 'style.css', mimetype='text/css')
+    return send_from_directory(os.path.join(BASE_DIR, 'frontend'), 'style.css', mimetype='text/css')
 
 
-@app.route('/my_model/<path:filename>')
+@app.route('/models/<path:filename>')
 def serve_model_file(filename):
-    """Serve model files from my_model directory"""
-    return send_from_directory(os.path.join(BASE_DIR, 'my_model'), filename)
+    """Serve model files from models directory"""
+    return send_from_directory(os.path.join(BASE_DIR, 'models'), filename)
 
 
-@app.route('/boltAPP/<path:filename>')
+@app.route('/lib/boltAPP/<path:filename>')
 def serve_boltapp_file(filename):
     """Serve boltAPP library files"""
-    boltapp_dir = os.path.join(BASE_DIR, 'boltAPP')
+    boltapp_dir = os.path.join(BASE_DIR, 'lib', 'boltAPP')
     # Determine MIME type based on file extension
     mimetype = 'application/javascript'
     if filename.endswith('.css'):

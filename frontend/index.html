@@ -13,6 +13,9 @@
     
     <!-- Gesture Configuration (modular and customizable) -->
     <script src="gesture-config.js"></script>
+    
+    <!-- Movement Control (separate from color/matrix commands) -->
+    <script src="movement-control.js"></script>
 </head>
 
 <body>
@@ -76,12 +79,42 @@
         <div class="column command-column">
             <h2>Sphero Connection</h2>
             
-            <!-- Label Color Picker Section -->
-            <div id="label-color-picker-section" class="label-color-section" style="display: none;">
-                <h3>Matrix Colors by Label</h3>
-                <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Click a label to change its color</p>
-                <div id="label-color-pickers" class="label-color-pickers"></div>
-                <button id="updateColorsBtn" class="btn-secondary" style="margin-top: 15px; display: none;">Update Colors</button>
+            <!-- Label List Section -->
+            <div id="label-list-section" class="label-list-section" style="display: none;">
+                <h3>Labels</h3>
+                <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Click a label to configure</p>
+                <div id="label-list" class="label-list"></div>
+                <button id="update-color-action-btn" class="btn-primary" style="margin-top: 15px; display: none;">Update Color & Action</button>
+            </div>
+            
+            <!-- Label Choice Modal -->
+            <div id="label-choice-modal" class="label-choice-modal" style="display: none;">
+                <div class="label-choice-content">
+                    <h4 id="label-choice-title">Configure Label</h4>
+                    <button class="label-choice-btn" data-choice="color">Change Color</button>
+                    <button class="label-choice-btn" data-choice="action">Change Action</button>
+                    <button class="label-choice-btn label-choice-close">Cancel</button>
+                </div>
+            </div>
+            
+            <!-- Color Picker Modal (right corner) -->
+            <div id="color-picker-modal" class="color-picker-modal" style="display: none;">
+                <div class="color-picker-content">
+                    <h4 id="color-picker-title">Select Color</h4>
+                    <input type="color" id="color-picker-input" class="color-picker-input">
+                    <div class="color-picker-actions">
+                        <button id="color-picker-cancel" class="btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Selector Modal -->
+            <div id="action-selector-modal" class="action-selector-modal" style="display: none;">
+                <div class="action-selector-content">
+                    <h4 id="action-selector-title">Select Action</h4>
+                    <div id="action-selector-body" class="action-selector-body"></div>
+                    <button id="action-selector-close" class="btn-secondary">Close</button>
+                </div>
             </div>
             
             <button id="connectBtn" class="btn-primary">Connect to Sphero BOLT</button>
@@ -99,10 +132,10 @@
     </div>
 
     <!-- boltAPP Sphero BOLT Library (must load before app.js) -->
-    <script src="boltAPP/const.js" onerror="console.error('Failed to load const.js')"></script>
-    <script src="boltAPP/utils.js" onerror="console.error('Failed to load utils.js')"></script>
-    <script src="boltAPP/queue.js" onerror="console.error('Failed to load queue.js')"></script>
-    <script src="boltAPP/spheroBolt.js" onerror="console.error('Failed to load spheroBolt.js')"></script>
+    <script src="../lib/boltAPP/const.js" onerror="console.error('Failed to load const.js')"></script>
+    <script src="../lib/boltAPP/utils.js" onerror="console.error('Failed to load utils.js')"></script>
+    <script src="../lib/boltAPP/queue.js" onerror="console.error('Failed to load queue.js')"></script>
+    <script src="../lib/boltAPP/spheroBolt.js" onerror="console.error('Failed to load spheroBolt.js')"></script>
     
     <!-- Verify SpheroBolt is loaded before app.js -->
     <script>

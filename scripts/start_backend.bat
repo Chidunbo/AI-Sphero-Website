@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo Starting Sphero BOLT Backend Server
+echo Starting AI Sphero Website Backend Server
 echo ========================================
 echo.
 cd backend

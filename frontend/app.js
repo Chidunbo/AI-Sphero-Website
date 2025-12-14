@@ -4,7 +4,7 @@
 // More API functions here:
 // https://github.com/googlecreativelab/teachablemachine-community/tree/master/libraries/image
 // The link to your model provided by Teachable Machine export panel
-const URL = "./my_model/";
+const URL = "/models/";
 
 let model, webcam, labelContainer, maxPredictions;
 let isConnected = false;
@@ -14,6 +14,10 @@ let isLoopRunning = false; // Track if prediction loop is running
 let labelColors = {}; // Store RGB colors for each label: { "LabelName": { r: 255, g: 0, b: 0 } }
 let pendingLabelColors = {}; // Store pending colors before update button is clicked
 window.labelColors = labelColors; // Make it globally accessible
+
+// Store user-selected actions for each label
+let labelActions = {}; // Store actions: { "LabelName": { type: "roll", speed: 100, heading: 0, angle: 90, color: {r, g, b} } }
+window.labelActions = labelActions; // Make it globally accessible
 
 // Backend API URL - use relative path since frontend is served from same origin
 const API_BASE_URL = '/api';
@@ -258,6 +262,16 @@ async function resetToInitialState() {
         maxPredictions = 0;
         lastDetectedGesture = null;
         
+        // Clean up movement control
+        if (typeof cleanupMovementControl === 'function') {
+            cleanupMovementControl();
+        }
+        
+        // Clean up movement control
+        if (typeof cleanupMovementControl === 'function') {
+            cleanupMovementControl();
+        }
+        
         // Clear predictions
         labelContainer = null;
         const labelContainerEl = document.getElementById("label-container");
@@ -442,6 +456,11 @@ async function initModel() {
             model = null;
         }
         lastDetectedGesture = null;
+        
+        // Clean up movement control
+        if (typeof cleanupMovementControl === 'function') {
+            cleanupMovementControl();
+        }
 
         // Check if running from file:// protocol (CORS issue)
         if (window.location.protocol === 'file:') {
@@ -498,7 +517,7 @@ async function initModel() {
         displayModelCategories(classNames);
         
         // Display label color pickers
-        displayLabelColorPickers(classNames);
+        displayLabelList(classNames);
 
         // Setup prediction labels with bar structure
         labelContainer = document.getElementById("label-container");
@@ -825,9 +844,8 @@ async function connectSphero() {
             console.warn("Initialization commands failed:", initError);
         }
         
-        // Update UI
-        connectBtn.textContent = "Connected ✓";
-        connectBtn.disabled = true;
+        // Update UI - Hide button since status message shows connection
+        connectBtn.style.display = "none";
         updateConnectionStatus("Connected to Sphero BOLT!", "#00aa00");
         
         // Activate command column
@@ -840,6 +858,7 @@ async function connectSphero() {
         bolt = null;
         connectBtn.textContent = "Connect to Sphero BOLT";
         connectBtn.disabled = false;
+        connectBtn.style.display = "block"; // Show button on error
         
         updateConnectionStatus("Connection failed", "#aa0000");
         logToTerminal(`Connection failed: ${error.message}`, "error");
@@ -861,9 +880,15 @@ function onSpheroDisconnected(event) {
     isConnected = false;
     bolt = null;
     
+    // Clean up movement control
+    if (typeof cleanupMovementControl === 'function') {
+        cleanupMovementControl();
+    }
+    
     const connectBtn = document.getElementById("connectBtn");
     connectBtn.textContent = "Connect to Sphero BOLT";
     connectBtn.disabled = false;
+    connectBtn.style.display = "block"; // Show button again when disconnected
     updateConnectionStatus("Disconnected", "#aa0000");
     logToTerminal("Disconnected from Sphero BOLT", "warning");
     updateMovementStatus("Status: Disconnected");
@@ -1089,6 +1114,642 @@ function displayModelCategories(categories) {
     
     categoriesContainer.appendChild(categoryList);
     logToTerminal(`Categories displayed: ${categories.join(", ")}`, "info");
+}
+
+// Display label action selectors
+function displayLabelActionSelectors(labels) {
+    const actionSection = document.getElementById("label-action-section");
+    const actionSelectorsContainer = document.getElementById("label-action-selectors");
+    
+    if (!actionSection || !actionSelectorsContainer || !labels || labels.length === 0) {
+        return;
+    }
+    
+    // Show the section
+    actionSection.style.display = "block";
+    actionSelectorsContainer.innerHTML = "";
+    
+    // Create action selector for each label
+    labels.forEach(label => {
+        const labelActionDiv = document.createElement("div");
+        labelActionDiv.className = "label-action-item";
+        labelActionDiv.dataset.label = label;
+        
+        // Label name
+        const labelName = document.createElement("div");
+        labelName.className = "label-action-name";
+        labelName.textContent = label;
+        labelActionDiv.appendChild(labelName);
+        
+        // Action type selector
+        const actionSelect = document.createElement("select");
+        actionSelect.className = "label-action-select";
+        actionSelect.dataset.label = label;
+        
+        // Action options
+        const options = [
+            { value: "none", text: "No Action" },
+            { value: "roll", text: "Roll Forward" },
+            { value: "angle", text: "Set Angle" },
+            { value: "stop", text: "Stop Moving" }
+        ];
+        
+        options.forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt.value;
+            option.textContent = opt.text;
+            if (labelActions[label] && labelActions[label].type === opt.value) {
+                option.selected = true;
+            }
+            actionSelect.appendChild(option);
+        });
+        
+        // Action parameters container
+        const paramsContainer = document.createElement("div");
+        paramsContainer.className = "label-action-params";
+        paramsContainer.style.display = "none";
+        
+        // Roll parameters: speed, heading
+        const rollParams = document.createElement("div");
+        rollParams.className = "action-params-roll";
+        rollParams.style.display = "none";
+        
+        const speedLabel = document.createElement("label");
+        speedLabel.textContent = "Speed (0-255):";
+        const speedInput = document.createElement("input");
+        speedInput.type = "number";
+        speedInput.min = "0";
+        speedInput.max = "255";
+        speedInput.value = labelActions[label]?.speed || 100;
+        speedInput.className = "action-param-speed";
+        
+        const headingLabel = document.createElement("label");
+        headingLabel.textContent = "Heading (0-359):";
+        const headingInput = document.createElement("input");
+        headingInput.type = "number";
+        headingInput.min = "0";
+        headingInput.max = "359";
+        headingInput.value = labelActions[label]?.heading || 0;
+        headingInput.className = "action-param-heading";
+        
+        rollParams.appendChild(speedLabel);
+        rollParams.appendChild(speedInput);
+        rollParams.appendChild(headingLabel);
+        rollParams.appendChild(headingInput);
+        
+        // Angle parameters: angle
+        const angleParams = document.createElement("div");
+        angleParams.className = "action-params-angle";
+        angleParams.style.display = "none";
+        
+        const angleLabel = document.createElement("label");
+        angleLabel.textContent = "Angle (0-359):";
+        const angleInput = document.createElement("input");
+        angleInput.type = "number";
+        angleInput.min = "0";
+        angleInput.max = "359";
+        angleInput.value = labelActions[label]?.angle || 0;
+        angleInput.className = "action-param-angle";
+        
+        angleParams.appendChild(angleLabel);
+        angleParams.appendChild(angleInput);
+        
+        // Matrix color parameters: color picker
+        const matrixParams = document.createElement("div");
+        matrixParams.className = "action-params-matrix";
+        matrixParams.style.display = "none";
+        
+        const colorLabel = document.createElement("label");
+        colorLabel.textContent = "Color:";
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        const currentColor = labelActions[label]?.color || labelColors[label] || { r: 255, g: 0, b: 0 };
+        colorInput.value = rgbToHex(currentColor.r, currentColor.g, currentColor.b);
+        colorInput.className = "action-param-color";
+        
+        matrixParams.appendChild(colorLabel);
+        matrixParams.appendChild(colorInput);
+        
+        paramsContainer.appendChild(rollParams);
+        paramsContainer.appendChild(angleParams);
+        paramsContainer.appendChild(matrixParams);
+        
+        // Show/hide parameters based on selected action
+        function updateParamsVisibility() {
+            const selectedAction = actionSelect.value;
+            rollParams.style.display = selectedAction === "roll" ? "block" : "none";
+            angleParams.style.display = selectedAction === "angle" ? "block" : "none";
+            matrixParams.style.display = selectedAction === "matrix" ? "block" : "none";
+            paramsContainer.style.display = selectedAction !== "none" && selectedAction !== "stop" ? "block" : "none";
+            
+            // Save action immediately when changed
+            if (selectedAction === "none") {
+                delete labelActions[label];
+            } else {
+                const action = {
+                    type: selectedAction,
+                    speed: parseInt(speedInput.value) || 100,
+                    heading: parseInt(headingInput.value) || 0,
+                    angle: parseInt(angleInput.value) || 0,
+                    color: hexToRgb(colorInput.value)
+                };
+                labelActions[label] = action;
+            }
+            window.labelActions = labelActions; // Update global reference
+        }
+        
+        actionSelect.addEventListener("change", updateParamsVisibility);
+        speedInput.addEventListener("input", updateParamsVisibility);
+        headingInput.addEventListener("input", updateParamsVisibility);
+        angleInput.addEventListener("input", updateParamsVisibility);
+        colorInput.addEventListener("input", updateParamsVisibility);
+        
+        // Initial visibility
+        updateParamsVisibility();
+        
+        labelActionDiv.appendChild(actionSelect);
+        labelActionDiv.appendChild(paramsContainer);
+        actionSelectorsContainer.appendChild(labelActionDiv);
+    });
+    
+    logToTerminal(`Action selectors displayed for ${labels.length} labels`, "info");
+}
+
+// Display label list (new unified UI)
+function displayLabelList(labels) {
+    const labelListSection = document.getElementById("label-list-section");
+    const labelListContainer = document.getElementById("label-list");
+    
+    if (!labelListSection || !labelListContainer || !labels || labels.length === 0) {
+        return;
+    }
+    
+    // Show the section
+    labelListSection.style.display = "block";
+    labelListContainer.innerHTML = "";
+    
+    // Initialize default colors if not set
+    labels.forEach((label, index) => {
+        if (!labelColors[label]) {
+            const hue = (index * 360) / labels.length;
+            const rgb = hslToRgb(hue / 360, 0.7, 0.5);
+            labelColors[label] = { r: rgb[0], g: rgb[1], b: rgb[2] };
+        }
+    });
+    
+    // Update global reference
+    window.labelColors = labelColors;
+    
+    // Create clickable label items
+    labels.forEach(label => {
+        const labelItem = document.createElement("div");
+        labelItem.className = "label-list-item";
+        labelItem.dataset.label = label;
+        
+        const currentColor = labelColors[label] || { r: 0, g: 0, b: 0 };
+        const hexColor = rgbToHex(currentColor.r, currentColor.g, currentColor.b);
+        labelItem.style.backgroundColor = hexColor;
+        labelItem.style.color = getContrastColor(currentColor.r, currentColor.g, currentColor.b);
+        labelItem.textContent = label;
+        
+        // Show current action if set
+        const actionInfo = document.createElement("span");
+        actionInfo.className = "label-action-info";
+        if (labelActions[label] && labelActions[label].type !== "none") {
+            const actionNames = {
+                "roll": "Roll",
+                "angle": "Angle",
+                "stop": "Stop",
+                "matrix": "Matrix"
+            };
+            actionInfo.textContent = ` • ${actionNames[labelActions[label].type] || labelActions[label].type}`;
+        }
+        labelItem.appendChild(actionInfo);
+        
+        // Click handler - show choice modal
+        labelItem.addEventListener("click", () => {
+            showLabelChoiceModal(label);
+        });
+        
+        labelListContainer.appendChild(labelItem);
+    });
+    
+    logToTerminal(`Label list created for ${labels.length} labels`, "info");
+    
+    // Setup update button
+    setupUpdateButton();
+}
+
+// Show label choice modal (Color or Action)
+let currentEditingLabel = null;
+
+function showLabelChoiceModal(label) {
+    currentEditingLabel = label;
+    const modal = document.getElementById("label-choice-modal");
+    const title = document.getElementById("label-choice-title");
+    
+    if (modal && title) {
+        title.textContent = `Configure: ${label}`;
+        modal.style.display = "flex";
+        
+        // Setup button handlers
+        const colorBtn = modal.querySelector('[data-choice="color"]');
+        const actionBtn = modal.querySelector('[data-choice="action"]');
+        const closeBtn = modal.querySelector('.label-choice-close');
+        
+        if (colorBtn) {
+            colorBtn.onclick = () => {
+                modal.style.display = "none";
+                showColorPickerModal(label);
+            };
+        }
+        
+        if (actionBtn) {
+            actionBtn.onclick = () => {
+                modal.style.display = "none";
+                showActionSelectorModal(label);
+            };
+        }
+        
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                modal.style.display = "none";
+                currentEditingLabel = null;
+            };
+        }
+    }
+}
+
+// Show color picker modal (right corner)
+// Store the current color input handler to remove it later
+let currentColorInputHandler = null;
+
+function showColorPickerModal(label) {
+    const modal = document.getElementById("color-picker-modal");
+    const title = document.getElementById("color-picker-title");
+    const colorInput = document.getElementById("color-picker-input");
+    
+    if (modal && title && colorInput) {
+        title.textContent = `Color for: ${label}`;
+        
+        // Remove any existing event listener to prevent duplicates
+        if (currentColorInputHandler) {
+            colorInput.removeEventListener("input", currentColorInputHandler);
+            currentColorInputHandler = null;
+        }
+        
+        // Set current color (use pending if exists, otherwise use saved)
+        const currentColor = pendingLabelColors[label] || labelColors[label] || { r: 255, g: 0, b: 0 };
+        colorInput.value = rgbToHex(currentColor.r, currentColor.g, currentColor.b);
+        
+        modal.style.display = "flex";
+        
+        // Create a new handler for this specific label
+        currentColorInputHandler = (e) => {
+            const hex = e.target.value;
+            const rgb = hexToRgb(hex);
+            pendingLabelColors[label] = { r: rgb.r, g: rgb.g, b: rgb.b };
+            
+            // Update label display preview (not saved yet) - only for the current label
+            updateLabelDisplayPreview(label, hex, rgb);
+            
+            // Show update button if there are pending changes
+            checkPendingChanges();
+        };
+        
+        // Store color changes in pendingLabelColors (not applied yet)
+        colorInput.addEventListener("input", currentColorInputHandler);
+        
+        // Setup cancel button
+        const cancelBtn = document.getElementById("color-picker-cancel");
+        if (cancelBtn) {
+            // Remove any existing onclick handler
+            cancelBtn.onclick = null;
+            cancelBtn.onclick = () => {
+                modal.style.display = "none";
+                currentEditingLabel = null;
+                // Remove event listener when closing
+                if (currentColorInputHandler) {
+                    colorInput.removeEventListener("input", currentColorInputHandler);
+                    currentColorInputHandler = null;
+                }
+                // Show update button if there are pending changes
+                checkPendingChanges();
+            };
+        }
+    }
+}
+
+// Show action selector modal
+function showActionSelectorModal(label) {
+    const modal = document.getElementById("action-selector-modal");
+    const title = document.getElementById("action-selector-title");
+    const body = document.getElementById("action-selector-body");
+    
+    if (modal && title && body) {
+        title.textContent = `Action for: ${label}`;
+        body.innerHTML = "";
+        
+        modal.style.display = "flex";
+        
+        // Create action selector UI for this specific label
+        const actionSelect = document.createElement("select");
+        actionSelect.className = "action-select-modal";
+        
+        const options = [
+            { value: "none", text: "No Action" },
+            { value: "roll", text: "Roll Forward" },
+            { value: "angle", text: "Set Angle" },
+            { value: "stop", text: "Stop Moving" }
+        ];
+        
+        options.forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt.value;
+            option.textContent = opt.text;
+            if (labelActions[label] && labelActions[label].type === opt.value) {
+                option.selected = true;
+            }
+            actionSelect.appendChild(option);
+        });
+        
+        body.appendChild(actionSelect);
+        
+        // Parameters container
+        const paramsContainer = document.createElement("div");
+        paramsContainer.className = "action-params-modal";
+        paramsContainer.style.display = "none";
+        
+        // Roll parameters
+        const rollParams = createRollParams(label);
+        const angleParams = createAngleParams(label);
+        
+        paramsContainer.appendChild(rollParams);
+        paramsContainer.appendChild(angleParams);
+        
+        body.appendChild(paramsContainer);
+        
+        // Store pending actions (not applied yet)
+        const pendingActions = {};
+        if (labelActions[label]) {
+            pendingActions[label] = { ...labelActions[label] };
+        }
+        
+        // Update visibility function
+        function updateParamsVisibility() {
+            const selectedAction = actionSelect.value;
+            rollParams.style.display = selectedAction === "roll" ? "block" : "none";
+            angleParams.style.display = selectedAction === "angle" ? "block" : "none";
+            paramsContainer.style.display = selectedAction !== "none" && selectedAction !== "stop" ? "block" : "none";
+            
+            // Store in pending actions (not saved to labelActions yet)
+            if (selectedAction === "none") {
+                delete pendingActions[label];
+            } else {
+                const speedInput = rollParams.querySelector('.action-param-speed');
+                const headingInput = rollParams.querySelector('.action-param-heading');
+                const angleInput = angleParams.querySelector('.action-param-angle');
+                
+                pendingActions[label] = {
+                    type: selectedAction,
+                    speed: speedInput ? parseInt(speedInput.value) || 100 : 100,
+                    heading: headingInput ? parseInt(headingInput.value) || 0 : 0,
+                    angle: angleInput ? parseInt(angleInput.value) || 0 : 0
+                };
+            }
+            
+            // Update label display preview (not saved yet)
+            updateLabelDisplayPreview(label, null, null, pendingActions[label]);
+            
+            // Show update button if there are pending changes
+            checkPendingChanges();
+        }
+        
+        actionSelect.addEventListener("change", updateParamsVisibility);
+        
+        // Add input listeners for parameters
+        const speedInput = rollParams.querySelector('.action-param-speed');
+        const headingInput = rollParams.querySelector('.action-param-heading');
+        const angleInput = angleParams.querySelector('.action-param-angle');
+        
+        if (speedInput) speedInput.addEventListener("input", updateParamsVisibility);
+        if (headingInput) headingInput.addEventListener("input", updateParamsVisibility);
+        if (angleInput) angleInput.addEventListener("input", updateParamsVisibility);
+        
+        updateParamsVisibility(); // Initial call
+        
+        // Store pending actions when modal closes
+        const closeBtn = document.getElementById("action-selector-close");
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                // Save pending actions to pendingLabelActions (but not applied yet)
+                if (!window.pendingLabelActions) {
+                    window.pendingLabelActions = {};
+                }
+                if (pendingActions[label]) {
+                    window.pendingLabelActions[label] = pendingActions[label];
+                } else {
+                    delete window.pendingLabelActions[label];
+                }
+                
+                modal.style.display = "none";
+                currentEditingLabel = null;
+                checkPendingChanges();
+            };
+        }
+    }
+}
+
+// Helper functions to create parameter inputs
+function createRollParams(label) {
+    const div = document.createElement("div");
+    div.className = "action-params-roll";
+    
+    // Speed parameter group
+    const speedGroup = document.createElement("div");
+    speedGroup.className = "param-group";
+    const speedLabel = document.createElement("label");
+    speedLabel.textContent = "Speed (0-255):";
+    speedLabel.className = "param-label";
+    const speedInput = document.createElement("input");
+    speedInput.type = "number";
+    speedInput.min = "0";
+    speedInput.max = "255";
+    speedInput.value = labelActions[label]?.speed || 100;
+    speedInput.className = "action-param-speed param-input";
+    speedGroup.appendChild(speedLabel);
+    speedGroup.appendChild(speedInput);
+    
+    // Heading parameter group (on new line)
+    const headingGroup = document.createElement("div");
+    headingGroup.className = "param-group";
+    const headingLabel = document.createElement("label");
+    headingLabel.textContent = "Heading (0-359):";
+    headingLabel.className = "param-label";
+    const headingInput = document.createElement("input");
+    headingInput.type = "number";
+    headingInput.min = "0";
+    headingInput.max = "359";
+    headingInput.value = labelActions[label]?.heading || 0;
+    headingInput.className = "action-param-heading param-input";
+    headingGroup.appendChild(headingLabel);
+    headingGroup.appendChild(headingInput);
+    
+    div.appendChild(speedGroup);
+    div.appendChild(headingGroup);
+    
+    return div;
+}
+
+function createAngleParams(label) {
+    const div = document.createElement("div");
+    div.className = "action-params-angle";
+    
+    // Angle parameter group
+    const angleGroup = document.createElement("div");
+    angleGroup.className = "param-group";
+    const angleLabel = document.createElement("label");
+    angleLabel.textContent = "Angle (0-359):";
+    angleLabel.className = "param-label";
+    const angleInput = document.createElement("input");
+    angleInput.type = "number";
+    angleInput.min = "0";
+    angleInput.max = "359";
+    angleInput.value = labelActions[label]?.angle || 0;
+    angleInput.className = "action-param-angle param-input";
+    angleGroup.appendChild(angleLabel);
+    angleGroup.appendChild(angleInput);
+    
+    div.appendChild(angleGroup);
+    
+    return div;
+}
+
+// Update label display preview (for pending changes, not saved yet)
+function updateLabelDisplayPreview(label, hexColor, rgbColor, pendingAction) {
+    const labelItem = document.querySelector(`.label-list-item[data-label="${label}"]`);
+    if (labelItem) {
+        // Update color preview if provided
+        if (hexColor && rgbColor) {
+            labelItem.style.backgroundColor = hexColor;
+            labelItem.style.color = getContrastColor(rgbColor.r, rgbColor.g, rgbColor.b);
+        }
+        
+        // Update action info preview if provided
+        const actionInfo = labelItem.querySelector('.label-action-info');
+        if (actionInfo) {
+            if (pendingAction && pendingAction.type !== "none") {
+                const actionNames = {
+                    "roll": "Roll",
+                    "angle": "Angle",
+                    "stop": "Stop"
+                };
+                actionInfo.textContent = ` • ${actionNames[pendingAction.type] || pendingAction.type}`;
+            } else if (!pendingAction) {
+                // Use saved action
+                const savedAction = window.pendingLabelActions && window.pendingLabelActions[label] 
+                    ? window.pendingLabelActions[label] 
+                    : (labelActions[label] || null);
+                if (savedAction && savedAction.type !== "none") {
+                    const actionNames = {
+                        "roll": "Roll",
+                        "angle": "Angle",
+                        "stop": "Stop"
+                    };
+                    actionInfo.textContent = ` • ${actionNames[savedAction.type] || savedAction.type}`;
+                } else {
+                    actionInfo.textContent = "";
+                }
+            } else {
+                actionInfo.textContent = "";
+            }
+        }
+    }
+}
+
+// Update label display after changes (saved)
+function updateLabelDisplay(label) {
+    const labelItem = document.querySelector(`.label-list-item[data-label="${label}"]`);
+    if (labelItem) {
+        // Update color
+        const currentColor = labelColors[label] || { r: 0, g: 0, b: 0 };
+        const hexColor = rgbToHex(currentColor.r, currentColor.g, currentColor.b);
+        labelItem.style.backgroundColor = hexColor;
+        labelItem.style.color = getContrastColor(currentColor.r, currentColor.g, currentColor.b);
+        
+        // Update action info
+        const actionInfo = labelItem.querySelector('.label-action-info');
+        if (actionInfo) {
+            const currentAction = (window.pendingLabelActions && window.pendingLabelActions[label]) 
+                ? window.pendingLabelActions[label] 
+                : (labelActions[label] || null);
+            if (currentAction && currentAction.type !== "none") {
+                const actionNames = {
+                    "roll": "Roll",
+                    "angle": "Angle",
+                    "stop": "Stop"
+                };
+                actionInfo.textContent = ` • ${actionNames[currentAction.type] || currentAction.type}`;
+            } else {
+                actionInfo.textContent = "";
+            }
+        }
+    }
+}
+
+// Check if there are pending changes and show/hide update button
+function checkPendingChanges() {
+    const updateBtn = document.getElementById("update-color-action-btn");
+    if (!updateBtn) return;
+    
+    const hasPendingColors = Object.keys(pendingLabelColors).length > 0;
+    const hasPendingActions = window.pendingLabelActions && Object.keys(window.pendingLabelActions).length > 0;
+    
+    if (hasPendingColors || hasPendingActions) {
+        updateBtn.style.display = "block";
+    } else {
+        updateBtn.style.display = "none";
+    }
+}
+
+// Setup Update Color & Action button handler
+function setupUpdateButton() {
+    const updateBtn = document.getElementById("update-color-action-btn");
+    if (updateBtn) {
+        // Remove any existing listeners
+        const newUpdateBtn = updateBtn.cloneNode(true);
+        updateBtn.parentNode.replaceChild(newUpdateBtn, updateBtn);
+        
+        newUpdateBtn.addEventListener("click", () => {
+            // Apply pending colors
+            Object.keys(pendingLabelColors).forEach(label => {
+                labelColors[label] = { ...pendingLabelColors[label] };
+            });
+            pendingLabelColors = {};
+            
+            // Apply pending actions
+            if (window.pendingLabelActions) {
+                Object.keys(window.pendingLabelActions).forEach(label => {
+                    labelActions[label] = { ...window.pendingLabelActions[label] };
+                });
+                window.pendingLabelActions = {};
+            }
+            
+            // Update global references
+            window.labelColors = labelColors;
+            window.labelActions = labelActions;
+            
+            // Update all label displays
+            Object.keys(labelColors).forEach(label => {
+                updateLabelDisplay(label);
+            });
+            
+            // Hide update button
+            newUpdateBtn.style.display = "none";
+            
+            logToTerminal("Colors and actions updated for all labels", "success");
+        });
+    }
 }
 
 // Display label color pickers
@@ -1349,8 +2010,14 @@ document.addEventListener("DOMContentLoaded", () => {
 function handleGesture(gesture) {
     logToTerminal(`Gesture detected: "${gesture}"`, "action");
     
-    // Use the modular gesture configuration system
+    // Handle movement control first (separate from color commands)
+    if (typeof handleMovementControl === 'function') {
+        handleMovementControl(gesture);
+    }
+    
+    // Use the modular gesture configuration system for color/matrix commands
     // executeGestureActions will check for user-selected colors first
+    // Note: Movement control is handled separately above, so color commands can still run
     if (typeof executeGestureActions === 'function') {
         // Fire-and-forget: execute immediately without blocking
         executeGestureActions(gesture);
