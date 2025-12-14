@@ -107,7 +107,16 @@ function executeGestureActions(gestureName) {
                 break;
                 
             case "setMatrixColor":
-                setMatrixColor(action.r || 0, action.g || 0, action.b || 0);
+                // Check if user has selected a color for this gesture label
+                // labelColors is made globally accessible via window.labelColors in app.js
+                if (typeof window !== 'undefined' && window.labelColors && window.labelColors[gestureName]) {
+                    // Use user-selected color instead of hardcoded color
+                    const userColor = window.labelColors[gestureName];
+                    setMatrixColor(userColor.r, userColor.g, userColor.b);
+                } else {
+                    // Fall back to hardcoded color if no user selection
+                    setMatrixColor(action.r || 0, action.g || 0, action.b || 0);
+                }
                 break;
                 
             case "stop":

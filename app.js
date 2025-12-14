@@ -9,29 +9,444 @@ const URL = "./my_model/";
 let model, webcam, labelContainer, maxPredictions;
 let isConnected = false;
 let lastDetectedGesture = null; // Track normalized gesture name to only send commands on change
+let isLoopRunning = false; // Track if prediction loop is running
+// Make labelColors globally accessible so gesture-config.js can use it
+let labelColors = {}; // Store RGB colors for each label: { "LabelName": { r: 255, g: 0, b: 0 } }
+let pendingLabelColors = {}; // Store pending colors before update button is clicked
+window.labelColors = labelColors; // Make it globally accessible
 
 // Backend API URL - use relative path since frontend is served from same origin
 const API_BASE_URL = '/api';
 
 
 //--------------------------------------
+// FILE UPLOAD HANDLING
+//--------------------------------------
+let uploadedZipFile = null;
+let extractedFiles = {
+    metadata: false,
+    model: false,
+    weights: false
+};
+
+// Setup file upload area
+const fileUploadArea = document.getElementById("file-upload-area");
+const fileInput = document.getElementById("fileInput");
+const fileList = document.getElementById("file-list");
+
+// Click anywhere on file upload area to open file picker
+if (fileUploadArea) {
+    fileUploadArea.addEventListener("click", (e) => {
+        // Don't trigger if clicking on file list items
+        if (e.target.closest(".file-item")) {
+            return;
+        }
+        // Open file picker
+        fileInput.click();
+    });
+}
+
+// File input change
+fileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+        handleZipFile(e.target.files[0]);
+    }
+});
+
+// Drag and drop handlers
+fileUploadArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    fileUploadArea.classList.add("drag-over");
+});
+
+fileUploadArea.addEventListener("dragleave", () => {
+    fileUploadArea.classList.remove("drag-over");
+});
+
+fileUploadArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    fileUploadArea.classList.remove("drag-over");
+    if (e.dataTransfer.files.length > 0) {
+        handleZipFile(e.dataTransfer.files[0]);
+    }
+});
+
+function handleZipFile(file) {
+    // Validate it's a ZIP file
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+        alert("Please upload a ZIP file (.zip)");
+        return;
+    }
+    
+    uploadedZipFile = file;
+    displayFileList();
+}
+
+function displayFileList() {
+    fileList.innerHTML = "";
+    
+    // Check if there are any files to display
+    const hasFiles = uploadedZipFile || Object.values(extractedFiles).some(v => v);
+    
+    if (!hasFiles) {
+        // Hide file list if no files
+        fileList.classList.remove("show");
+        return;
+    }
+    
+    // Show uploaded ZIP file name if present
+    if (uploadedZipFile) {
+        const zipItem = document.createElement("div");
+        zipItem.className = "file-item";
+        
+        const zipName = document.createElement("span");
+        zipName.className = "file-item-name";
+        zipName.textContent = uploadedZipFile.name;
+        
+        const zipStatus = document.createElement("span");
+        zipStatus.className = "file-item-status ready";
+        zipStatus.textContent = "✓ Ready";
+        
+        zipItem.appendChild(zipName);
+        zipItem.appendChild(zipStatus);
+        fileList.appendChild(zipItem);
+    }
+    
+    // Show extracted files status
+    const files = [
+        { key: "metadata", name: "metadata.json" },
+        { key: "model", name: "model.json" },
+        { key: "weights", name: "weights.bin" }
+    ];
+    
+    files.forEach(({ key, name }) => {
+        const fileItem = document.createElement("div");
+        fileItem.className = "file-item";
+        
+        const fileName = document.createElement("span");
+        fileName.className = "file-item-name";
+        fileName.textContent = name;
+        
+        const fileStatus = document.createElement("span");
+        fileStatus.className = "file-item-status";
+        if (extractedFiles[key]) {
+            fileStatus.textContent = "✓ Extracted";
+            fileStatus.classList.add("ready");
+        } else {
+            fileStatus.textContent = uploadedZipFile ? "⏳ Waiting..." : "✗ Not uploaded";
+            if (!uploadedZipFile) {
+                fileStatus.style.color = "#aa0000";
+            }
+        }
+        
+        fileItem.appendChild(fileName);
+        fileItem.appendChild(fileStatus);
+        fileList.appendChild(fileItem);
+    });
+    
+    fileList.classList.add("show");
+}
+
+//--------------------------------------
+// SHOW/HIDE FILE UPLOAD AREA
+//--------------------------------------
+function hideFileUploadArea() {
+    const fileUploadRow = document.getElementById("file-upload-row");
+    if (fileUploadRow) {
+        fileUploadRow.style.display = "none";
+    }
+}
+
+function showFileUploadArea() {
+    const fileUploadRow = document.getElementById("file-upload-row");
+    if (fileUploadRow) {
+        fileUploadRow.style.display = "flex";
+    }
+}
+
+//--------------------------------------
+// CHANGE MODEL BUTTON
+//--------------------------------------
+function addChangeModelButton() {
+    // Check if button already exists
+    if (document.getElementById('changeModelBtn')) {
+        return;
+    }
+    
+    const setupColumn = document.querySelector('.setup-column');
+    const changeModelBtn = document.createElement("button");
+    changeModelBtn.id = "changeModelBtn";
+    changeModelBtn.className = "btn-secondary";
+    changeModelBtn.textContent = "Change Model";
+    
+    changeModelBtn.addEventListener("click", async () => {
+        // Reset everything and show upload area
+        await resetToInitialState();
+        showFileUploadArea();
+        removeChangeModelButton();
+    });
+    
+    // Insert after Load Model button row
+    const startBtn = document.getElementById('startBtn');
+    const loadModelRow = startBtn ? startBtn.closest('.setup-row') : null;
+    if (loadModelRow && loadModelRow.parentNode) {
+        loadModelRow.parentNode.insertBefore(changeModelBtn, loadModelRow.nextSibling);
+    } else {
+        setupColumn.appendChild(changeModelBtn);
+    }
+}
+
+function removeChangeModelButton() {
+    const changeModelBtn = document.getElementById('changeModelBtn');
+    if (changeModelBtn) {
+        changeModelBtn.remove();
+    }
+}
+
+//--------------------------------------
+// RESET TO INITIAL STATE
+//--------------------------------------
+async function resetToInitialState() {
+    try {
+        logToTerminal("Resetting to initial state...", "info");
+        
+        // Stop prediction loop
+        isLoopRunning = false;
+        
+        // Stop webcam if running
+        if (webcam) {
+            try {
+                webcam.stop();
+                webcam = null;
+            } catch (e) {
+                console.warn("Error stopping webcam:", e);
+            }
+        }
+        
+        // Clear webcam container
+        const webcamContainer = document.getElementById("webcam-container");
+        if (webcamContainer) {
+            webcamContainer.innerHTML = '<p class="webcam-placeholder">Webcam will appear here</p>';
+        }
+        
+        // Reset camera button
+        const turnOnCameraBtn = document.getElementById("turnOnCameraBtn");
+        if (turnOnCameraBtn) {
+            turnOnCameraBtn.textContent = "Camera On";
+            turnOnCameraBtn.disabled = false;
+        }
+        
+        // Dispose of TensorFlow model to free memory
+        if (model) {
+            try {
+                // TensorFlow.js models have a dispose method
+                if (model.dispose) {
+                    model.dispose();
+                }
+            } catch (e) {
+                console.warn("Error disposing model:", e);
+            }
+        }
+        
+        // Clear model state
+        model = null;
+        maxPredictions = 0;
+        lastDetectedGesture = null;
+        
+        // Clear predictions
+        labelContainer = null;
+        const labelContainerEl = document.getElementById("label-container");
+        if (labelContainerEl) {
+            labelContainerEl.innerHTML = "";
+        }
+        
+        // Reset gesture display
+        const gestureOutput = document.getElementById("gestureOutput");
+        if (gestureOutput) {
+            gestureOutput.innerText = "–";
+        }
+        const confidenceOutput = document.getElementById("confidenceOutput");
+        if (confidenceOutput) {
+            confidenceOutput.innerText = "0%";
+        }
+        
+        // Clear model categories
+        const categoriesContainer = document.getElementById("model-categories");
+        if (categoriesContainer) {
+            categoriesContainer.innerHTML = "";
+            categoriesContainer.classList.remove("show");
+        }
+        
+        // Clear uploaded files (frontend and backend)
+        uploadedZipFile = null;
+        extractedFiles = {
+            metadata: false,
+            model: false,
+            weights: false
+        };
+        fileInput.value = "";
+        
+        // Clear label colors
+        labelColors = {};
+        pendingLabelColors = {};
+        window.labelColors = {};
+        
+        // Hide label color picker section
+        const colorPickerSection = document.getElementById("label-color-picker-section");
+        if (colorPickerSection) {
+            colorPickerSection.style.display = "none";
+        }
+        
+        // Hide update button
+        const updateColorsBtn = document.getElementById("updateColorsBtn");
+        if (updateColorsBtn) {
+            updateColorsBtn.style.display = "none";
+        }
+        
+        // Clear backend files
+        try {
+            const response = await fetch(`${API_BASE_URL}/clearModel`, {
+                method: "POST"
+            });
+            const data = await response.json();
+            if (data.success) {
+                logToTerminal("Model files cleared from server", "info");
+            }
+        } catch (error) {
+            console.warn("Error clearing backend files:", error);
+        }
+        
+        // Update file list display
+        displayFileList();
+        
+        // Show file upload area
+        showFileUploadArea();
+        
+        // Reset Load Model button
+        const startBtn = document.getElementById("startBtn");
+        if (startBtn) {
+            startBtn.textContent = "Load Model";
+            startBtn.disabled = false;
+        }
+        
+        // Deactivate prediction column
+        deactivatePredictionColumn();
+        // Command column stays active
+        
+        // Reset virtual matrix
+        if (matrixPixels && matrixPixels.length > 0) {
+            matrixPixels.forEach(pixel => {
+                pixel.style.backgroundColor = "#000";
+            });
+        }
+        const matrixInfo = document.getElementById("matrix-info");
+        if (matrixInfo) {
+            matrixInfo.textContent = "Matrix: Off";
+            matrixInfo.style.color = "#333";
+        }
+        
+        // Reset movement status
+        updateMovementStatus("Status: Idle");
+        
+        logToTerminal("Reset complete. Ready for new model upload.", "success");
+        
+    } catch (error) {
+        console.error("Reset error:", error);
+        logToTerminal(`Reset error: ${error.message}`, "error");
+    }
+}
+
+
+//--------------------------------------
 // LOAD THE IMAGE MODEL
 //--------------------------------------
-document.getElementById("startBtn").addEventListener("click", initModel);
+document.getElementById("startBtn").addEventListener("click", async () => {
+    // Check if ZIP file is selected for upload
+    if (uploadedZipFile) {
+        // Upload and extract ZIP file first
+        await uploadModelZip();
+    }
+    
+    // Then load the model
+    await initModel();
+});
+
+async function uploadModelZip() {
+    try {
+        const startBtn = document.getElementById("startBtn");
+        startBtn.textContent = "Uploading & Extracting...";
+        startBtn.disabled = true;
+        
+        logToTerminal("Uploading ZIP file...", "info");
+        
+        // Create FormData
+        const formData = new FormData();
+        formData.append("zipfile", uploadedZipFile);
+        
+        // Upload to backend
+        const response = await fetch(`${API_BASE_URL}/uploadModel`, {
+            method: "POST",
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || "Upload failed");
+        }
+        
+        logToTerminal(`ZIP file uploaded and extracted successfully!`, "success");
+        logToTerminal(`Model: ${data.modelName || "Unknown"}`, "info");
+        logToTerminal(`Categories: ${data.labels ? data.labels.join(", ") : "None"}`, "info");
+        
+        // Update extracted files status
+        if (data.files) {
+            extractedFiles = {
+                metadata: data.files['metadata.json'] || false,
+                model: data.files['model.json'] || false,
+                weights: data.files['weights.bin'] || false
+            };
+        }
+        
+        // Update file list display
+        displayFileList();
+        
+        startBtn.textContent = "Load Model";
+        startBtn.disabled = false;
+        
+    } catch (error) {
+        const startBtn = document.getElementById("startBtn");
+        startBtn.textContent = "Load Model";
+        startBtn.disabled = false;
+        
+        console.error("Upload error:", error);
+        logToTerminal(`Upload failed: ${error.message}`, "error");
+        alert("Failed to upload ZIP file: " + error.message);
+        throw error;
+    }
+}
 
 async function initModel() {
     try {
         const startBtn = document.getElementById("startBtn");
         startBtn.textContent = "Loading...";
         startBtn.disabled = true;
+        
+        // Reset model state
+        if (model) {
+            model = null;
+        }
+        lastDetectedGesture = null;
 
         // Check if running from file:// protocol (CORS issue)
         if (window.location.protocol === 'file:') {
             throw new Error('CORS_FILE_PROTOCOL');
         }
 
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
+        // Add cache-busting parameter to ensure fresh model is loaded after upload
+        const cacheBuster = "?t=" + Date.now();
+        const modelURL = URL + "model.json" + cacheBuster;
+        const metadataURL = URL + "metadata.json" + cacheBuster;
 
         // First, verify files exist by trying to fetch them
         try {
@@ -66,8 +481,19 @@ async function initModel() {
         console.log("Model loaded successfully! Classes:", maxPredictions);
         logToTerminal(`Model loaded: ${maxPredictions} classes`, "success");
 
+        // Update extracted files status (files are now in my_model folder)
+        extractedFiles = {
+            metadata: true,
+            model: true,
+            weights: true
+        };
+        displayFileList();
+
         // Display model categories
         displayModelCategories(classNames);
+        
+        // Display label color pickers
+        displayLabelColorPickers(classNames);
 
         // Setup prediction labels with bar structure
         labelContainer = document.getElementById("label-container");
@@ -99,6 +525,10 @@ async function initModel() {
         startBtn.textContent = "Model Loaded ✓";
         console.log("Model is ready to use!");
         logToTerminal("Model is ready to use!", "success");
+        
+        // Hide file upload area and show Change Model button
+        hideFileUploadArea();
+        addChangeModelButton();
         
     } catch (error) {
         const startBtn = document.getElementById("startBtn");
@@ -177,6 +607,7 @@ async function init() {
         webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
         await webcam.setup(); // request access to the webcam
         await webcam.play();
+        isLoopRunning = true;
         window.requestAnimationFrame(loop);
 
         // Append elements to the DOM
@@ -243,9 +674,14 @@ async function init() {
 // PREDICTION LOOP
 //--------------------------------------
 async function loop() {
+    if (!isLoopRunning) {
+        return; // Stop loop if reset was called
+    }
     webcam.update(); // update the webcam frame
     await predict();
-    window.requestAnimationFrame(loop);
+    if (isLoopRunning) {
+        window.requestAnimationFrame(loop);
+    }
 }
 
 //--------------------------------------
@@ -412,8 +848,7 @@ function startStatusCheck() {
                 logToTerminal("Disconnected from Sphero BOLT", "warning");
                 updateMovementStatus("Status: Disconnected");
                 
-                // Deactivate command column
-                deactivateCommandColumn();
+                // Command column stays active
                 clearInterval(statusCheckInterval);
                 statusCheckInterval = null;
             }
@@ -668,6 +1103,154 @@ function displayModelCategories(categories) {
     logToTerminal(`Categories displayed: ${categories.join(", ")}`, "info");
 }
 
+// Display label color pickers
+function displayLabelColorPickers(labels) {
+    const colorPickerSection = document.getElementById("label-color-picker-section");
+    const colorPickersContainer = document.getElementById("label-color-pickers");
+    const updateColorsBtn = document.getElementById("updateColorsBtn");
+    
+    if (!colorPickerSection || !colorPickersContainer || !labels || labels.length === 0) {
+        return;
+    }
+    
+    // Show the section
+    colorPickerSection.style.display = "block";
+    colorPickersContainer.innerHTML = "";
+    
+    // Initialize default colors if not set (distribute colors evenly around color wheel)
+    labels.forEach((label, index) => {
+        if (!labelColors[label]) {
+            // Generate a color based on index (hue distribution)
+            const hue = (index * 360) / labels.length;
+            const rgb = hslToRgb(hue / 360, 0.7, 0.5);
+            labelColors[label] = { r: rgb[0], g: rgb[1], b: rgb[2] };
+        }
+        // Initialize pending colors with current colors
+        pendingLabelColors[label] = { ...labelColors[label] };
+    });
+    
+    // Update global reference
+    window.labelColors = labelColors;
+    
+    // Create clickable label tag for each label
+    labels.forEach(label => {
+        const labelTag = document.createElement("div");
+        labelTag.className = "label-color-tag";
+        labelTag.dataset.label = label;
+        
+        const currentColor = labelColors[label] || { r: 0, g: 0, b: 0 };
+        const hexColor = rgbToHex(currentColor.r, currentColor.g, currentColor.b);
+        labelTag.style.backgroundColor = hexColor;
+        labelTag.style.color = getContrastColor(currentColor.r, currentColor.g, currentColor.b);
+        labelTag.textContent = label;
+        
+        // Hidden color input
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        colorInput.className = "label-color-input-hidden";
+        colorInput.value = hexColor;
+        colorInput.style.display = "none";
+        
+        // Click label to open color picker
+        labelTag.addEventListener("click", () => {
+            colorInput.click();
+        });
+        
+        // Update pending color when changed
+        colorInput.addEventListener("input", (e) => {
+            const hex = e.target.value;
+            const rgb = hexToRgb(hex);
+            pendingLabelColors[label] = { r: rgb.r, g: rgb.g, b: rgb.b };
+            
+            // Update visual preview
+            labelTag.style.backgroundColor = hex;
+            labelTag.style.color = getContrastColor(rgb.r, rgb.g, rgb.b);
+            
+            // Show update button
+            const updateBtn = document.getElementById("updateColorsBtn");
+            if (updateBtn) {
+                updateBtn.style.display = "block";
+            }
+        });
+        
+        colorPickersContainer.appendChild(labelTag);
+        colorPickersContainer.appendChild(colorInput);
+    });
+    
+    // Update Colors button handler
+    const updateBtn = document.getElementById("updateColorsBtn");
+    if (updateBtn) {
+        // Remove any existing listeners by cloning
+        const newUpdateBtn = updateBtn.cloneNode(true);
+        updateBtn.parentNode.replaceChild(newUpdateBtn, updateBtn);
+        
+        newUpdateBtn.addEventListener("click", () => {
+            // Apply pending colors
+            Object.keys(pendingLabelColors).forEach(label => {
+                labelColors[label] = { ...pendingLabelColors[label] };
+            });
+            
+            // Update global reference
+            window.labelColors = labelColors;
+            
+            // Hide update button
+            newUpdateBtn.style.display = "none";
+            
+            logToTerminal("Matrix colors updated for all labels", "success");
+        });
+    }
+    
+    logToTerminal(`Color pickers created for ${labels.length} labels`, "info");
+}
+
+// Helper function: Get contrasting text color (black or white)
+function getContrastColor(r, g, b) {
+    // Calculate relative luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? "#000000" : "#ffffff";
+}
+
+// Helper function: HSL to RGB
+function hslToRgb(h, s, l) {
+    let r, g, b;
+    if (s === 0) {
+        r = g = b = l;
+    } else {
+        const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+        g = Math.round(hue2rgb(p, q, h) * 255);
+        b = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+    }
+    return [r, g, b];
+}
+
+// Helper function: RGB to Hex
+function rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map(x => {
+        const hex = x.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+    }).join("");
+}
+
+// Helper function: Hex to RGB
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 0, g: 0, b: 0 };
+}
+
 // Initialize virtual matrix on page load
 let virtualMatrix = null;
 let matrixPixels = [];
@@ -763,9 +1346,10 @@ document.addEventListener("DOMContentLoaded", () => {
     initVirtualMatrix();
     logToTerminal("Debug terminal ready", "success");
     
-    // Ensure columns start in inactive state
+    // Ensure prediction column starts in inactive state
     deactivatePredictionColumn();
-    deactivateCommandColumn();
+    // Command column (Sphero Connection) is active by default
+    
 });
 
 //--------------------------------------
@@ -778,6 +1362,7 @@ function handleGesture(gesture) {
     logToTerminal(`Gesture detected: "${gesture}"`, "action");
     
     // Use the modular gesture configuration system
+    // executeGestureActions will check for user-selected colors first
     if (typeof executeGestureActions === 'function') {
         // Fire-and-forget: execute immediately without blocking
         executeGestureActions(gesture);

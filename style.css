@@ -83,6 +83,152 @@ body {
     margin-bottom: 20px;
 }
 
+.file-upload-area {
+    border: 3px dashed #1a4d6e;
+    border-radius: 12px;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.file-upload-area.collapsed {
+    padding: 12px 20px;
+}
+
+.file-upload-area:not(.collapsed) {
+    padding: 20px;
+}
+
+.file-upload-area:not(.collapsed):hover {
+    border-color: #2c5f7a;
+    background: #e9ecef;
+    transform: translateY(-2px);
+}
+
+.file-upload-area.drag-over {
+    border-color: #00aa00;
+    background: #e8f5e9;
+}
+
+.file-upload-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.file-upload-content {
+    text-align: center;
+    flex: 1;
+}
+
+.file-upload-body {
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    overflow: hidden;
+}
+
+.file-upload-area.collapsed .file-upload-body {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+}
+
+.file-upload-area:not(.collapsed) .file-upload-body {
+    max-height: 1000px;
+    opacity: 1;
+    margin-top: 15px;
+}
+
+.collapse-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 5px 10px;
+    color: #1a4d6e;
+    font-size: 16px;
+    transition: transform 0.3s ease, color 0.2s ease;
+    border-radius: 4px;
+}
+
+.collapse-btn:hover {
+    background: rgba(26, 77, 110, 0.1);
+    color: #2c5f7a;
+}
+
+.collapse-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.file-upload-area.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+.file-upload-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a4d6e;
+    margin-bottom: 8px;
+}
+
+.file-upload-hint {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+}
+
+.file-list {
+    margin-top: 15px;
+    display: none;
+}
+
+.file-list.show {
+    display: block;
+}
+
+.file-item {
+    background: white;
+    padding: 10px 15px;
+    margin: 5px 0;
+    border-radius: 6px;
+    border-left: 4px solid #1a4d6e;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+.file-item-name {
+    font-weight: 600;
+    color: #333;
+}
+
+.file-item-status {
+    font-size: 12px;
+    color: #666;
+}
+
+.file-item-status.ready {
+    color: #00aa00;
+    font-weight: 600;
+}
+
+.delete-item {
+    background: #fff5f5 !important;
+    border-left-color: #aa0000 !important;
+}
+
+.delete-item:hover {
+    background: #ffe0e0 !important;
+}
+
+.delete-button {
+    width: 100%;
+    text-align: center;
+    display: block;
+}
+
 .model-categories {
     margin-top: 10px;
     padding: 15px;
@@ -145,6 +291,76 @@ body {
 .btn-primary:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+.btn-secondary {
+    width: 100%;
+    padding: 12px 20px;
+    margin: 10px 0;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 2px solid #1a4d6e;
+    border-radius: 8px;
+    background: white;
+    color: #1a4d6e;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    box-shadow: 0 2px 8px rgba(26, 77, 110, 0.2);
+}
+
+.btn-secondary:hover {
+    background: #f0f8ff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(26, 77, 110, 0.3);
+}
+
+.btn-secondary:active {
+    transform: translateY(0);
+}
+
+.label-color-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #1a4d6e;
+}
+
+.label-color-section h3 {
+    margin-bottom: 15px;
+    color: #1a4d6e;
+    font-size: 1.1em;
+}
+
+.label-color-pickers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.label-color-tag {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    user-select: none;
+}
+
+.label-color-tag:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.label-color-tag:active {
+    transform: translateY(0);
+}
+
+.label-color-input-hidden {
+    display: none;
 }
 
 .status {
@@ -290,8 +506,8 @@ body {
     overflow-x: hidden;
     line-height: 1.6;
     border: 2px solid #333;
-    height: 300px;
-    max-height: 300px;
+    height: 150px;
+    max-height: 150px;
 }
 
 .debug-terminal::-webkit-scrollbar {

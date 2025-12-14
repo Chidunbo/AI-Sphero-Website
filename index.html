@@ -24,24 +24,33 @@
     <div class="container">
         <!-- Column 1: Setup -->
         <div class="column setup-column">
-            <h2>Setup</h2>
+            <h2>Model Setup</h2>
             
-            <!-- Row 1: Model Loaded Button and Categories -->
+            <!-- Row 1: Model Upload Area -->
+            <div class="setup-row" id="file-upload-row">
+                <div id="file-upload-area" class="file-upload-area">
+                    <div class="file-upload-content">
+                        <p class="file-upload-text">Drop ZIP file here or click to select</p>
+                        <p class="file-upload-hint">ZIP file must contain: metadata.json, model.json, weights.bin</p>
+                        <input type="file" id="fileInput" accept=".zip" style="display: none;">
+                    </div>
+                    <div id="file-list" class="file-list"></div>
+                </div>
+            </div>
+            
+            <!-- Row 2: Model Loaded Button and Categories -->
             <div class="setup-row">
                 <button id="startBtn" class="btn-primary">Load Model</button>
                 <div id="model-categories" class="model-categories"></div>
             </div>
             
-            <!-- Row 2: Camera View and Button -->
+            <!-- Row 3: Camera View and Button -->
             <div class="setup-row">
                 <div id="webcam-container" class="webcam-box">
                     <p class="webcam-placeholder">Webcam will appear here</p>
                 </div>
                 <button id="turnOnCameraBtn" class="btn-primary">Camera On</button>
             </div>
-            
-            <button id="connectBtn" class="btn-primary">Connect to Sphero BOLT</button>
-            <div id="connectionStatus" class="status">Not connected</div>
         </div>
 
         <!-- Column 2: Prediction -->
@@ -64,10 +73,21 @@
         </div>
 
         <!-- Column 3: Sphero Command -->
-        <div class="column command-column inactive">
-            <h2>Sphero Command</h2>
+        <div class="column command-column">
+            <h2>Sphero Connection</h2>
             
-            <div class="debug-section">
+            <!-- Label Color Picker Section -->
+            <div id="label-color-picker-section" class="label-color-section" style="display: none;">
+                <h3>Matrix Colors by Label</h3>
+                <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Click a label to change its color</p>
+                <div id="label-color-pickers" class="label-color-pickers"></div>
+                <button id="updateColorsBtn" class="btn-secondary" style="margin-top: 15px; display: none;">Update Colors</button>
+            </div>
+            
+            <button id="connectBtn" class="btn-primary">Connect to Sphero BOLT</button>
+            <div id="connectionStatus" class="status">Not connected</div>
+            
+            <div class="debug-section" style="margin-top: 20px;">
                 <h3>Virtual LED Matrix</h3>
                 <div id="virtual-matrix" class="virtual-matrix"></div>
                 <div id="matrix-info" class="matrix-info">Matrix: Off</div>

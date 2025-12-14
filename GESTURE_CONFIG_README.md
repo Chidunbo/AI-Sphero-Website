@@ -44,22 +44,24 @@ Change the robot's LED matrix color.
 ```javascript
 "Ms. Liu": {
     actions: [
-        { type: "setMatrixColor", r: 138, g: 43, b: 226 }  // Blue violet
+        { type: "setMatrixColor", r: 138, g: 43, b: 226 }  // Blue violet (fallback if no user selection)
     ]
 },
 
 "Cat": {
     actions: [
-        { type: "setMatrixColor", r: 255, g: 165, b: 0 }  // Orange
+        { type: "setMatrixColor", r: 255, g: 165, b: 0 }  // Orange (fallback if no user selection)
     ]
 },
 
 "Dog": {
     actions: [
-        { type: "setMatrixColor", r: 139, g: 69, b: 19 }  // Saddle brown
+        { type: "setMatrixColor", r: 139, g: 69, b: 19 }  // Saddle brown (fallback if no user selection)
     ]
 }
 ```
+
+**Note:** The colors defined in `setMatrixColor` actions are now used as **fallback values only**. If a user has selected a color for a label using the color picker in the "Sphero Connection" column, that user-selected color will be used instead of the hardcoded value. The hardcoded colors serve as defaults when no user selection exists.
 
 ### Adding a New Gesture
 

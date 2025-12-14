@@ -8,6 +8,10 @@ from flask_cors import CORS
 import logging
 import os
 import threading
+import zipfile
+import shutil
+import tempfile
+from werkzeug.utils import secure_filename
 from spherov2 import scanner
 from spherov2.sphero_edu import SpheroEduAPI
 from spherov2.types import Color
@@ -433,6 +437,165 @@ def health():
     return jsonify({"status": "ok", "service": "Sphero BOLT API"})
 
 
+@app.route('/api/clearModel', methods=['POST'])
+def clear_model():
+    """Clear/delete uploaded model files"""
+    try:
+        model_dir = os.path.join(BASE_DIR, 'my_model')
+        
+        # List of files to remove
+        files_to_remove = ['metadata.json', 'model.json', 'weights.bin']
+        removed_files = []
+        
+        for filename in files_to_remove:
+            file_path = os.path.join(model_dir, filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                removed_files.append(filename)
+        
+        logger.info(f"Cleared model files: {removed_files}")
+        
+        return jsonify({
+            "success": True,
+            "message": "Model files cleared",
+            "removedFiles": removed_files
+        })
+        
+    except Exception as e:
+        logger.error(f"Clear model error: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/uploadModel', methods=['POST'])
+def upload_model():
+    """Upload ZIP file containing model files (metadata.json, model.json, weights.bin) and extract them"""
+    temp_dir = None
+    try:
+        # Check if ZIP file is present
+        if 'zipfile' not in request.files:
+            return jsonify({
+                "success": False,
+                "error": "Missing ZIP file. Please upload a ZIP file containing metadata.json, model.json, and weights.bin"
+            }), 400
+        
+        zip_file = request.files['zipfile']
+        
+        if zip_file.filename == '':
+            return jsonify({
+                "success": False,
+                "error": "No file selected"
+            }), 400
+        
+        # Validate it's a ZIP file
+        if not zip_file.filename.lower().endswith('.zip'):
+            return jsonify({
+                "success": False,
+                "error": "File must be a ZIP archive (.zip)"
+            }), 400
+        
+        # Create temporary directory for extraction
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, 'model.zip')
+        zip_file.save(zip_path)
+        
+        # Extract ZIP file
+        extracted_files = {}
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # List all files in the ZIP
+            file_list = zip_ref.namelist()
+            
+            # Extract all files to temp directory
+            zip_ref.extractall(temp_dir)
+            
+            # Look for required files (case-insensitive)
+            for file_name in file_list:
+                file_name_lower = file_name.lower()
+                # Handle files in subdirectories
+                base_name = os.path.basename(file_name).lower()
+                
+                if base_name == 'metadata.json':
+                    extracted_files['metadata'] = os.path.join(temp_dir, file_name)
+                elif base_name == 'model.json':
+                    extracted_files['model'] = os.path.join(temp_dir, file_name)
+                elif base_name == 'weights.bin':
+                    extracted_files['weights'] = os.path.join(temp_dir, file_name)
+        
+        # Validate all required files are present
+        missing_files = []
+        if 'metadata' not in extracted_files:
+            missing_files.append('metadata.json')
+        if 'model' not in extracted_files:
+            missing_files.append('model.json')
+        if 'weights' not in extracted_files:
+            missing_files.append('weights.bin')
+        
+        if missing_files:
+            # Clean up temp directory
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+            return jsonify({
+                "success": False,
+                "error": f"ZIP file is missing required files: {', '.join(missing_files)}"
+            }), 400
+        
+        # Define model directory
+        model_dir = os.path.join(BASE_DIR, 'my_model')
+        
+        # Create directory if it doesn't exist
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Copy extracted files to model directory (overwrite existing)
+        metadata_path = os.path.join(model_dir, 'metadata.json')
+        model_path = os.path.join(model_dir, 'model.json')
+        weights_path = os.path.join(model_dir, 'weights.bin')
+        
+        shutil.copy2(extracted_files['metadata'], metadata_path)
+        shutil.copy2(extracted_files['model'], model_path)
+        shutil.copy2(extracted_files['weights'], weights_path)
+        
+        logger.info(f"Model files extracted and saved to {model_dir}")
+        
+        # Read metadata to get labels
+        import json
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        
+        labels = metadata.get('labels', [])
+        
+        # Clean up temp directory
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        
+        return jsonify({
+            "success": True,
+            "message": "Model files uploaded and extracted successfully",
+            "labels": labels,
+            "modelName": metadata.get('modelName', 'Unknown'),
+            "files": {
+                "metadata.json": True,
+                "model.json": True,
+                "weights.bin": True
+            }
+        })
+        
+    except zipfile.BadZipFile:
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        return jsonify({
+            "success": False,
+            "error": "Invalid ZIP file format"
+        }), 400
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # Frontend Routes - Serve static files
 # Note: These routes must come AFTER API routes to avoid conflicts
 
@@ -467,11 +630,29 @@ def serve_model_file(filename):
 
 
 if __name__ == '__main__':
+    import socket
+    
+    # Get local IP address for network access
+    def get_local_ip():
+        try:
+            # Connect to a remote address to determine local IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "localhost"
+    
+    local_ip = get_local_ip()
+    
     print("=" * 60)
     print("Sphero BOLT Gesture Controller - Backend API")
     print("=" * 60)
-    print("Starting Flask server on http://localhost:5000")
-    print("Frontend will be available at: http://localhost:5000")
+    print("Starting Flask server...")
+    print(f"Local access:    http://localhost:5000")
+    print(f"Network access:  http://{local_ip}:5000")
+    print("Frontend will be available at both addresses")
     print("Make sure your Sphero BOLT is powered on and nearby")
     print("=" * 60)
     
