@@ -18,6 +18,11 @@ window.labelColors = labelColors; // Make it globally accessible
 // Backend API URL - use relative path since frontend is served from same origin
 const API_BASE_URL = '/api';
 
+//--------------------------------------
+// SPHERO BOLT CONNECTION (using boltAPP)
+//--------------------------------------
+let bolt = null; // SpheroBolt instance from boltAPP
+
 
 //--------------------------------------
 // FILE UPLOAD HANDLING
@@ -747,14 +752,44 @@ async function predict() {
 
 
 //--------------------------------------
-// CONNECT TO SPHERO BOLT (via Backend API)
+// CONNECT TO SPHERO BOLT (via Web Bluetooth API)
 //--------------------------------------
-document.getElementById("connectBtn").addEventListener("click", connectSphero);
+// Wait for DOM and scripts to be ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSpheroConnection);
+} else {
+    setupSpheroConnection();
+}
+
+function setupSpheroConnection() {
+    const connectBtn = document.getElementById("connectBtn");
+    if (connectBtn) {
+        connectBtn.addEventListener("click", connectSphero);
+        
+        // Debug: Check if SpheroBolt is available
+        if (typeof SpheroBolt === 'undefined') {
+            console.error("⚠️ [WARNING] SpheroBolt class is not defined. Check that boltAPP scripts are loaded.");
+            console.log("Available globals:", Object.keys(window).filter(k => k.includes('Sphero') || k.includes('bolt')));
+        } else {
+            console.log("✅ SpheroBolt class is loaded and ready");
+        }
+    }
+}
 
 async function connectSphero() {
     const connectBtn = document.getElementById("connectBtn");
     
     try {
+        // Check if SpheroBolt class is loaded
+        if (typeof SpheroBolt === 'undefined') {
+            throw new Error("SpheroBolt class not loaded. Please check that boltAPP scripts are loaded correctly.");
+        }
+        
+        // Check if Web Bluetooth is supported
+        if (!navigator.bluetooth) {
+            throw new Error("Web Bluetooth API is not supported in this browser. Please use Chrome, Edge, or Opera.");
+        }
+        
         console.log("🔵 [DEBUG] Starting Sphero connection process...");
         updateConnectionStatus("Scanning for devices...", "#ffaa00");
         
@@ -762,45 +797,33 @@ async function connectSphero() {
         connectBtn.textContent = "Scanning...";
         connectBtn.disabled = true;
         
-        // First, scan for available devices
-        const scanResponse = await fetch(`${API_BASE_URL}/scan`);
-        const scanData = await scanResponse.json();
+        // Create new SpheroBolt instance and connect
+        bolt = new SpheroBolt();
+        await bolt.connect();
         
-        if (!scanData.success) {
-            throw new Error(scanData.error || "Failed to scan for devices");
+        if (!bolt.connected) {
+            throw new Error("Failed to connect to Sphero BOLT");
         }
         
-        if (!scanData.devices || scanData.devices.length === 0) {
-            throw new Error("No Sphero BOLT devices found. Make sure your robot is powered on and nearby.");
-        }
-        
-        console.log("✅ [DEBUG] Found devices:", scanData.devices);
-        updateConnectionStatus(`Found ${scanData.devices.length} device(s)`, "#ffaa00");
-        
-        // Use the first device (or you could let user select)
-        const device = scanData.devices[0];
-        console.log(`🔵 [DEBUG] Connecting to: ${device.name} (${device.address})`);
-        updateConnectionStatus(`Connecting to ${device.name}...`, "#ffaa00");
-        connectBtn.textContent = "Connecting...";
-        
-        // Connect to the device
-        const connectResponse = await fetch(`${API_BASE_URL}/connect`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ address: device.address })
-        });
-        
-        const connectData = await connectResponse.json();
-        
-        if (!connectData.success) {
-            throw new Error(connectData.error || "Connection failed");
-        }
-        
-        isConnected = true;
         console.log("✅ [DEBUG] Connection established!");
         logToTerminal("Connected to Sphero BOLT!", "success");
+        
+        isConnected = true;
+        
+        // Listen for disconnection
+        if (bolt.device) {
+            bolt.device.addEventListener('gattserverdisconnected', onSpheroDisconnected);
+        }
+        
+        // Send initialization: Show solid green on matrix
+        try {
+            await sleep(500); // Wait a bit for initialization to complete
+            bolt.setMatrixColor(0, 255, 0); // Solid green
+            updateVirtualMatrix(0, 255, 0);
+            logToTerminal("Matrix set to green (connected)", "success");
+        } catch (initError) {
+            console.warn("Initialization commands failed:", initError);
+        }
         
         // Update UI
         connectBtn.textContent = "Connected ✓";
@@ -810,67 +833,55 @@ async function connectSphero() {
         // Activate command column
         activateCommandColumn();
         
-        // Check connection status periodically
-        startStatusCheck();
-        
     } catch (error) {
         console.error("❌ [DEBUG] Connection error:", error);
         
         isConnected = false;
+        bolt = null;
         connectBtn.textContent = "Connect to Sphero BOLT";
         connectBtn.disabled = false;
         
         updateConnectionStatus("Connection failed", "#aa0000");
         logToTerminal(`Connection failed: ${error.message}`, "error");
-        alert("Connection failed: " + error.message + "\n\nMake sure:\n1. The backend server is running (python backend/app.py)\n2. Your Sphero BOLT is powered on and nearby\n3. Bluetooth is enabled on your computer");
-    }
-}
-
-// Periodically check connection status
-let statusCheckInterval = null;
-
-function startStatusCheck() {
-    if (statusCheckInterval) {
-        clearInterval(statusCheckInterval);
-    }
-    
-    statusCheckInterval = setInterval(async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/status`);
-            const data = await response.json();
-            
-            if (!data.connected) {
-                isConnected = false;
-                const connectBtn = document.getElementById("connectBtn");
-                connectBtn.textContent = "Connect to Sphero BOLT";
-                connectBtn.disabled = false;
-                updateConnectionStatus("Disconnected", "#aa0000");
-                logToTerminal("Disconnected from Sphero BOLT", "warning");
-                updateMovementStatus("Status: Disconnected");
-                
-                // Command column stays active
-                clearInterval(statusCheckInterval);
-                statusCheckInterval = null;
-            }
-        } catch (error) {
-            console.warn("Status check failed:", error);
+        
+        let errorMsg = "Connection failed: " + error.message;
+        if (error.name === 'NotFoundError') {
+            errorMsg += "\n\nNo Sphero BOLT device found. Make sure:\n1. Your Sphero BOLT is powered on\n2. It's nearby and in pairing mode\n3. Bluetooth is enabled on your device";
+        } else if (error.name === 'SecurityError') {
+            errorMsg += "\n\nBluetooth permission denied. Please allow Bluetooth access and try again.";
+        } else if (!navigator.bluetooth) {
+            errorMsg += "\n\nWeb Bluetooth is not supported. Please use Chrome, Edge, or Opera browser.";
         }
-    }, 2000); // Check every 2 seconds
+        alert(errorMsg);
+    }
 }
 
-function onDisconnected() {
+function onSpheroDisconnected(event) {
+    console.log("Sphero BOLT disconnected");
     isConnected = false;
-    lastDetectedGesture = null; // Reset gesture tracker on disconnect
+    bolt = null;
+    
     const connectBtn = document.getElementById("connectBtn");
     connectBtn.textContent = "Connect to Sphero BOLT";
     connectBtn.disabled = false;
     updateConnectionStatus("Disconnected", "#aa0000");
+    logToTerminal("Disconnected from Sphero BOLT", "warning");
+    updateMovementStatus("Status: Disconnected");
     
-    if (statusCheckInterval) {
-        clearInterval(statusCheckInterval);
-        statusCheckInterval = null;
-    }
+    // Deactivate command column
+    deactivateCommandColumn();
 }
+
+// Helper function removed - using boltAPP methods directly
+
+// Helper function for sleep/delay
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Connection status is now handled by Web Bluetooth disconnect event
+
+// Disconnection is now handled by onSpheroDisconnected
 
 // Helper function to update connection status
 function updateConnectionStatus(message, color) {
@@ -882,16 +893,7 @@ function updateConnectionStatus(message, color) {
     console.log("📊 [STATUS]", message);
 }
 
-function onDisconnected() {
-    isConnected = false;
-    document.getElementById("connectBtn").textContent = "Connect to Sphero BOLT";
-    document.getElementById("connectBtn").disabled = false;
-    document.getElementById("connectionStatus").textContent = "Disconnected";
-    document.getElementById("connectionStatus").style.color = "#aa0000";
-    spheroDevice = null;
-    spheroService = null;
-    spheroCharacteristic = null;
-}
+// onDisconnected is now handled by onSpheroDisconnected
 
 
 //--------------------------------------
@@ -900,55 +902,43 @@ function onDisconnected() {
 
 // Set LED color (R, G, B values 0-255)
 // Optimized for real-time: fire-and-forget, no blocking
-function setColor(r, g, b) {
-    if (!isConnected) {
+async function setColor(r, g, b) {
+    if (!isConnected || !bolt) {
         logToTerminal("setColor called but not connected", "warning");
         return;
     }
     
     logToTerminal(`LED color: RGB(${r}, ${g}, ${b})`, "action");
     
-    // Fire-and-forget: send request without waiting for response
-    fetch(`${API_BASE_URL}/setColor`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ r, g, b })
-    }).catch((error) => {
+    try {
+        bolt.setMainLedColor(r, g, b);
+    } catch (error) {
         logToTerminal(`Error setting LED color: ${error.message}`, "error");
-    });
+    }
 }
 
 // Set matrix LED color (R, G, B values 0-255)
 // Optimized for real-time: fire-and-forget, no blocking
-function setMatrixColor(r, g, b) {
-    if (!isConnected) {
-        logToTerminal("setMatrixColor called but not connected", "warning");
-        // Still update virtual matrix for debugging
-        updateVirtualMatrix(r, g, b);
-        return;
-    }
-    
+async function setMatrixColor(r, g, b) {
     // Update virtual matrix immediately for visual feedback
     updateVirtualMatrix(r, g, b);
     
-    // Fire-and-forget: send request without waiting for response
-    fetch(`${API_BASE_URL}/setMatrixColor`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ r, g, b })
-    }).catch((error) => {
+    if (!isConnected || !bolt) {
+        logToTerminal("setMatrixColor called but not connected", "warning");
+        return;
+    }
+    
+    try {
+        bolt.setMatrixColor(r, g, b);
+    } catch (error) {
         logToTerminal(`Error setting matrix color: ${error.message}`, "error");
-    });
+    }
 }
 
 // Drive command (speed 0-255, heading 0-359 degrees)
 // Optimized for real-time: fire-and-forget, no blocking
-function drive(speed, heading) {
-    if (!isConnected) {
+async function drive(speed, heading) {
+    if (!isConnected || !bolt) {
         logToTerminal("drive called but not connected", "warning");
         return;
     }
@@ -957,22 +947,17 @@ function drive(speed, heading) {
     logToTerminal(`Drive: Speed ${speedPercent}% (${speed}), Heading ${heading}°`, "action");
     updateMovementStatus(`Status: Moving at ${speedPercent}% speed, heading ${heading}°`);
     
-    // Fire-and-forget: send request without waiting for response
-    fetch(`${API_BASE_URL}/drive`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ speed, heading })
-    }).catch((error) => {
+    try {
+        bolt.roll(speed, heading, []);
+    } catch (error) {
         logToTerminal(`Error driving: ${error.message}`, "error");
-    });
+    }
 }
 
 // Stop the robot
 // Optimized for real-time: fire-and-forget, no blocking
-function stop() {
-    if (!isConnected) {
+async function stop() {
+    if (!isConnected || !bolt) {
         logToTerminal("stop called but not connected", "warning");
         return;
     }
@@ -980,21 +965,19 @@ function stop() {
     logToTerminal("Stop command sent", "action");
     updateMovementStatus("Status: Stopped");
     
-    // Fire-and-forget: send request without waiting for response
-    fetch(`${API_BASE_URL}/stop`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    }).catch((error) => {
+    try {
+        // Use current heading (or 0 if not set) with speed 0
+        const currentHeading = bolt.heading || 0;
+        bolt.roll(0, currentHeading, []);
+    } catch (error) {
         logToTerminal(`Error stopping: ${error.message}`, "error");
-    });
+    }
 }
 
 // Turn robot to a specific heading (degrees 0-359)
 // Optimized for real-time: fire-and-forget, no blocking
-function turn(heading, speed = 0) {
-    if (!isConnected) {
+async function turn(heading, speed = 0) {
+    if (!isConnected || !bolt) {
         logToTerminal("turn called but not connected", "warning");
         return;
     }
@@ -1003,16 +986,11 @@ function turn(heading, speed = 0) {
     logToTerminal(`Turn to ${heading}°${speedText}`, "action");
     updateMovementStatus(`Status: Turning to ${heading}°${speedText}`);
     
-    // Fire-and-forget: send request without waiting for response
-    fetch(`${API_BASE_URL}/turn`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ heading, speed })
-    }).catch((error) => {
+    try {
+        bolt.roll(speed, heading, []);
+    } catch (error) {
         logToTerminal(`Error turning: ${error.message}`, "error");
-    });
+    }
 }
 
 // Scroll text on the LED matrix
@@ -1022,8 +1000,8 @@ function turn(heading, speed = 0) {
 // loop: boolean, whether to loop the text
 // Scroll text on LED matrix
 // Optimized for real-time: fire-and-forget, no blocking
-function scrollMatrixText(text, color, speed, loop) {
-    if (!isConnected) {
+async function scrollMatrixText(text, color, speed, loop) {
+    if (!isConnected || !bolt) {
         logToTerminal("scrollMatrixText called but not connected", "warning");
         return;
     }
@@ -1031,16 +1009,26 @@ function scrollMatrixText(text, color, speed, loop) {
     const colorStr = color ? `RGB(${color.r}, ${color.g}, ${color.b})` : "default";
     logToTerminal(`Scroll text: "${text}" (${colorStr}, speed: ${speed}, loop: ${loop})`, "action");
     
-    // Fire-and-forget: send request without waiting for response
-    fetch(`${API_BASE_URL}/scrollMatrixText`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text, color, speed, loop })
-    }).catch((error) => {
+    // Sphero BOLT command: Scroll text on matrix using boltAPP
+    try {
+        const r = color ? color.r : 255;
+        const g = color ? color.g : 255;
+        const b = color ? color.b : 255;
+        const loopByte = loop ? 0x01 : 0x00;
+        const textBytes = new TextEncoder().encode(text);
+        
+        // Create command using boltAPP's createCommand method
+        const commandInfo = {
+            deviceId: DeviceId.userIO,
+            commandId: UserIOCommandIds.matrixScrollText,
+            targetId: 0x12,
+            data: [speed, r, g, b, loopByte, textBytes.length, ...textBytes]
+        };
+        const command = bolt.createCommand(commandInfo);
+        bolt.queueCommand(command);
+    } catch (error) {
         logToTerminal(`Error scrolling text: ${error.message}`, "error");
-    });
+    }
 }
 
 
