@@ -1,6 +1,7 @@
-# AI Sphero Website
+# AI Sphero Controller Website
+Welcome! This website is originally designed for Menaul School MS CS Electives. It allows users to import their own Teachable Machine models, configure commands corresponding to different labels, and control a Sphero BOLT robot in real time. The project is designed with the goal of teaching machine learning to 7th–8th grade students and giving them a hands-on opportunity to use their models in a real-world, interactive setting.
 
-A web application that uses Teachable Machine image classification to control a Sphero BOLT robot with hand gestures in real time.
+This project is inspired by [BoltAPP](url) designed by Tineyo. It is also the product of a collaboration between me and Cursor. The summary below is written by Cursor as well.
 
 ## Project Structure
 
@@ -44,7 +45,7 @@ AI-Sphero-Website/
 
 - **Model Upload**: Upload Teachable Machine models via ZIP file
 - **Real-time Gesture Detection**: Use webcam to detect gestures
-- **Sphero BOLT Control**: Control robot via Web Bluetooth (no backend needed)
+- **Sphero BOLT Control**: Control robot via Web Bluetooth
 - **Customizable Actions**: Configure actions (roll, angle, stop) for each gesture label
 - **Color Customization**: Set matrix colors for each label
 - **Visual Feedback**: Virtual LED matrix and debug terminal
